@@ -33,7 +33,7 @@ body:
         - Linux
         - Other
     validations:
-      required: true
+      required: false
 
   - type: input
     id: hardware
@@ -54,6 +54,13 @@ body:
     validations:
       required: true
 
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed fix (optional)
+      description: e.g. new code, trigger fix, backfill query, or Rust fallback logic.
+    validations:
+      required: false
   - type: textarea
     id: acceptance
     attributes:
