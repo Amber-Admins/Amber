@@ -1,0 +1,89 @@
+name: "🧱 Refactor"
+description: "Improve internal structure without changing behavior"
+title: "[Refactor]: "
+labels: ["refactor"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for **internal improvements**: readability, modularity, type-safety, testability, performance hygiene, or removing brittle patterns.
+
+        If the change introduces new user-facing behavior, prefer **Feature Request** instead.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard/risky today? What pain does it cause for contributors/users?
+      placeholder: "This file mixes DB queries, IPC types, and command handlers, making changes risky…"
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Concrete examples (files/functions), screenshots/logs, or before/after diffs.
+      placeholder: |
+        Locations:
+        - path/to/file.rs (fn ...)
+
+        Symptoms:
+        - hard to test because...
+        - frequent merge conflicts because...
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope & constraints
+      description: What’s in/out? Include security/privacy constraints and “no behavior change” expectations.
+      placeholder: |
+        In scope:
+        Out of scope:
+        Constraints:
+    validations:
+      required: false
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed approach
+      description: The refactor plan (modules, boundaries, types, migrations, or incremental steps).
+      placeholder: |
+        Proposed structure:
+        - module A owns ...
+        - module B owns ...
+
+        Steps:
+        1. ...
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: Checklist of what “done” means.
+      placeholder: |
+        - [ ] No behavior changes (or listed exceptions)
+        - [ ] Public IPC surface unchanged (or versioned)
+        - [ ] Complexity reduced (files/modules clearer)
+        - [ ] Preflight/tests pass
+    validations:
+      required: true
+
+  - type: textarea
+    id: test_plan
+    attributes:
+      label: Test plan
+      description: How to validate there are no regressions.
+      placeholder: |
+        - Unit tests:
+        - Integration tests:
+        - Manual smoke:
+    validations:
+      required: true
+
