@@ -6,6 +6,7 @@ import VaultSidebar from "./components/VaultSidebar";
 import DecayDashboard from "./components/DecayDashboard";
 import LlmSettings from "./components/LlmSettings";
 import ScopeIndicator from "./components/ScopeIndicator";
+import type { ContextAssemblerScope } from "./constants/contextBudget";
 import { refreshAllDecayScores } from "./services/nodes";
 import "./App.css";
 
@@ -25,6 +26,7 @@ function App() {
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const leftPaneExpanded = leftPaneVisible || selectedNodeId !== null;
   const scopeNodeIds = useMemo(() => (selectedNodeId ? [selectedNodeId] : []), [selectedNodeId]);
+  const [assemblerScope, setAssemblerScope] = useState<ContextAssemblerScope>("local");
 
   function closeAllPanes() {
     setLeftPaneVisible(false);
@@ -158,7 +160,11 @@ function App() {
               <LlmSettings />
             ) : (
               <div className="right-pane-stack">
-                <ScopeIndicator selectedNodeIds={scopeNodeIds} scope="local" />
+                <ScopeIndicator
+                  selectedNodeIds={scopeNodeIds}
+                  scope={assemblerScope}
+                  onScopeChange={setAssemblerScope}
+                />
                 <NodeEditor
                   selectedNodeId={selectedNodeId}
                   onNodeDeleted={onNodeDeleted}

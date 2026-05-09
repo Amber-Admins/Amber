@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
+import { CONTEXT_MAX_TOKENS, type ContextAssemblerScope } from "../constants/contextBudget";
 import { debugBuildContext } from "../services/nodes";
 import { AppError } from "../services/ipcResult";
 
 type ScopeIndicatorProps = {
   selectedNodeIds: string[];
-  scope: string;
+  scope: ContextAssemblerScope;
+  onScopeChange: (scope: ContextAssemblerScope) => void;
 };
 
-function ScopeIndicator({ selectedNodeIds, scope }: ScopeIndicatorProps) {
+function ScopeIndicator({ selectedNodeIds, scope, onScopeChange }: ScopeIndicatorProps) {
   const [tokenEstimate, setTokenEstimate] = useState(0);
   const [status, setStatus] = useState("");
 
@@ -37,14 +39,35 @@ function ScopeIndicator({ selectedNodeIds, scope }: ScopeIndicatorProps) {
     };
   }, [scope, selectedNodeIds]);
 
-  const maxTokens = 8000;
+  const maxTokens = CONTEXT_MAX_TOKENS;
   const overBudget = tokenEstimate > maxTokens;
-  const scopeLabel = scope ? scope[0].toUpperCase() + scope.slice(1) : "Local";
 
   return (
     <section className="scope-indicator">
+      <div className="scope-indicator-row scope-indicator-row-controls">
+        <span className="scope-indicator-label">Assembler scope</span>
+        <div
+          className="scope-indicator-scope-toggle"
+          role="group"
+          aria-label="Assembler privacy scope"
+        >
+          <button
+            type="button"
+            className={`scope-scope-btn ${scope === "local" ? "active" : ""}`}
+            onClick={() => onScopeChange("local")}
+          >
+            Local
+          </button>
+          <button
+            type="button"
+            className={`scope-scope-btn ${scope === "cloud" ? "active" : ""}`}
+            onClick={() => onScopeChange("cloud")}
+          >
+            Cloud
+          </button>
+        </div>
+      </div>
       <div className="scope-indicator-row">
-        <span>Scope: {scopeLabel}</span>
         <span>Nodes in Context: {selectedNodeIds.length}</span>
         <span>
           Estimated Tokens: {tokenEstimate} / {maxTokens}

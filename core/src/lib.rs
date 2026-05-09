@@ -36,6 +36,10 @@ pub(crate) fn into_ipc<T>(result: Result<T, String>) -> IpcResponse<T> {
 pub type AppError = String;
 type AppState = DbState;
 
+/// Default `max_tokens` for context assembly (`debug_assemble_context`, `llm_chat`).
+/// Keep in sync with `CONTEXT_MAX_TOKENS` in `ui/constants/contextBudget.ts`.
+const DEFAULT_ASSEMBLER_MAX_TOKENS: usize = 8000;
+
 #[tauri::command]
 fn greet(name: &str) -> IpcResponse<String> {
     IpcResponse::Ok {
@@ -1062,7 +1066,7 @@ fn debug_assemble_context(
             node_ids,
             llm::assembler::AssemblerConfig {
                 scope,
-                max_tokens: 4000,
+                max_tokens: DEFAULT_ASSEMBLER_MAX_TOKENS,
             },
         )
     })())
@@ -1100,7 +1104,7 @@ fn llm_chat(
             node_ids,
             llm::assembler::AssemblerConfig {
                 scope,
-                max_tokens: 4000,
+                max_tokens: DEFAULT_ASSEMBLER_MAX_TOKENS,
             },
         )
     })();
