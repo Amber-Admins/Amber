@@ -11,8 +11,9 @@ const FALLBACK_CHARS_PER_TOKEN_EST: usize = 4;
 
 fn cl100k_bpe() -> &'static CoreBPE {
     static BPE: OnceLock<CoreBPE> = OnceLock::new();
-    BPE.get_or_init(|| {
-        tiktoken_rs::cl100k_base().expect("failed to load cl100k tokenizer (tiktoken-rs)")
+    BPE.get_or_init(|| match tiktoken_rs::cl100k_base() {
+        Ok(bpe) => bpe,
+        Err(err) => panic!("failed to load cl100k tokenizer (tiktoken-rs): {err}"),
     })
 }
 
@@ -374,12 +375,16 @@ mod tests {
             Err(err) => panic!("trimmed assembler context failed: {err}"),
         };
 
-        let bpe = tiktoken_rs::cl100k_base().expect("cl100k in test");
+        let bpe = match tiktoken_rs::cl100k_base() {
+            Ok(value) => value,
+            Err(err) => panic!("cl100k in test failed: {err}"),
+        };
         let full_ids = bpe.encode_with_special_tokens(&full);
         let sink_n = full_ids.len().min(ATTENTION_SINK_TOKENS);
-        let head = bpe
-            .decode(full_ids[..sink_n].to_vec())
-            .expect("decode sink prefix");
+        let head = match bpe.decode(full_ids[..sink_n].to_vec()) {
+            Ok(value) => value,
+            Err(err) => panic!("decode sink prefix failed: {err}"),
+        };
         assert!(trimmed.starts_with(&head));
         assert!(count_tokens(&trimmed) <= 120);
 

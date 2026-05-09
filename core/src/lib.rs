@@ -1,11 +1,13 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use chat::ChatMessage;
 use rusqlite::{params, Connection, Row};
 use serde::Serialize;
 use tauri::Manager;
 
 mod auth;
+mod chat;
 mod decay;
 mod ipc_types;
 pub mod llm;
@@ -440,6 +442,27 @@ fn db_ping(state: tauri::State<'_, DbState>) -> IpcResponse<String> {
             .query_row("SELECT sqlite_version();", [], |row| row.get(0))
             .map_err(|err| format!("SQLite ping failed: {err}"))?;
         Ok(format!("SQLite connected (version {version})"))
+    })())
+}
+
+#[tauri::command]
+fn chat_get_history(state: tauri::State<'_, AppState>) -> IpcResponse<Vec<ChatMessage>> {
+    into_ipc((|| {
+        let conn = open_connection(&state.db_path)?;
+        chat::get_chat_history(&conn)
+    })())
+}
+
+#[tauri::command]
+fn chat_append_message(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    role: String,
+    content: String,
+) -> IpcResponse<()> {
+    into_ipc((|| {
+        let conn = open_connection(&state.db_path)?;
+        chat::append_message(&conn, id, role, content)
     })())
 }
 
@@ -1316,6 +1339,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             db_ping,
+            chat_get_history,
+            chat_append_message,
             vault_create,
             vault_list,
             vault_delete,

@@ -86,4 +86,3 @@ body:
         - Manual smoke:
     validations:
       required: true
-

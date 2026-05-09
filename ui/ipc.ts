@@ -14,6 +14,12 @@ import type {
 } from "./types/generated";
 
 export type IpcResult<T> = { ok: T } | { err: string };
+export type ChatMessage = {
+  id: string;
+  role: string;
+  content: string;
+  created_at: string;
+};
 export type {
   Backlink,
   Door,
@@ -45,6 +51,14 @@ export function greet(name: string) {
 
 export function dbPing() {
   return invokeTyped<string>("db_ping");
+}
+
+export function chatGetHistory() {
+  return invokeTyped<ChatMessage[]>("chat_get_history");
+}
+
+export function chatAppendMessage(id: string, role: string, content: string) {
+  return invokeTyped<void>("chat_append_message", { id, role, content });
 }
 
 export function vaultCreate(input: VaultCreateInput) {
