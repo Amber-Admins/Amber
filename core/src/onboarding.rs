@@ -46,7 +46,9 @@ struct RawProposedNode {
 }
 
 fn normalize_non_empty(value: Option<String>) -> Option<String> {
-    value.map(|raw| raw.trim().to_string()).filter(|v| !v.is_empty())
+    value
+        .map(|raw| raw.trim().to_string())
+        .filter(|v| !v.is_empty())
 }
 
 fn normalize_required(value: String, field_name: &str, index: usize) -> Result<String, String> {
@@ -199,7 +201,8 @@ mod tests {
 
     #[test]
     fn parse_rejects_trailing_junk() {
-        let payload = r#"{"proposals":[{"title":"A","summary":"B","category":"personal"}]} trailing"#;
+        let payload =
+            r#"{"proposals":[{"title":"A","summary":"B","category":"personal"}]} trailing"#;
         let err = match parse_proposals_json(payload) {
             Ok(_) => panic!("expected trailing junk payload to fail"),
             Err(value) => value,
@@ -229,8 +232,14 @@ mod tests {
 
     #[test]
     fn vault_map_resolves_expected_keys() {
-        assert_eq!(vault_id_for_category_key("personal"), Some("vault_personal"));
-        assert_eq!(vault_id_for_category_key("Demographics"), Some("vault_root_graph"));
+        assert_eq!(
+            vault_id_for_category_key("personal"),
+            Some("vault_personal")
+        );
+        assert_eq!(
+            vault_id_for_category_key("Demographics"),
+            Some("vault_root_graph")
+        );
         assert_eq!(vault_id_for_category_key("unknown"), None);
     }
 }
