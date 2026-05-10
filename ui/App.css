@@ -1097,6 +1097,46 @@ body,
   width: fit-content;
 }
 
+.llm-settings-dev {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  display: grid;
+  gap: 8px;
+}
+
+.llm-settings-dev-title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #98acd8;
+}
+
+.llm-settings-dev-line {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #c3cae2;
+}
+
+.llm-settings-dev-line strong {
+  color: #e8efff;
+  font-weight: 600;
+}
+
+.llm-settings-dev-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.llm-settings-dev-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: #7f90b8;
+}
+
 .right-pane-stack {
   display: flex;
   flex-direction: column;

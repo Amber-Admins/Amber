@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { DEV_ONBOARDING_CHANGED } from "../constants/devEvents";
 import { getLlmModels } from "../services/nodes";
 import { AppError } from "../services/ipcResult";
+import { getOnboardingComplete, setOnboardingComplete } from "../services/settings";
 import {
   getLlmModel,
   getLlmProvider,
@@ -15,6 +17,10 @@ import {
 type Provider = "ollama" | "lmstudio";
 
 function LlmSettings() {
+  const showDevOnboardingTools = import.meta.env.DEV;
+  const [onboardingCompleteLabel, setOnboardingCompleteLabel] = useState<string>("…");
+  const [onboardingDevBusy, setOnboardingDevBusy] = useState(false);
+
   const [provider, setProvider] = useState<Provider>(() => {
     return getLlmProvider() === "lmstudio" ? "lmstudio" : "ollama";
   });
@@ -25,6 +31,30 @@ function LlmSettings() {
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const endpoint = provider === "ollama" ? ollamaEndpoint : lmStudioEndpoint;
+
+  useEffect(() => {
+    if (!showDevOnboardingTools) {
+      return;
+    }
+    void (async () => {
+      try {
+        const done = await getOnboardingComplete();
+        setOnboardingCompleteLabel(done ? "complete" : "not complete");
+      } catch {
+        setOnboardingCompleteLabel("error");
+      }
+    })();
+  }, [showDevOnboardingTools]);
+
+  async function refreshOnboardingDevState() {
+    try {
+      const done = await getOnboardingComplete();
+      setOnboardingCompleteLabel(done ? "complete" : "not complete");
+    } catch {
+      setOnboardingCompleteLabel("error");
+    }
+    window.dispatchEvent(new CustomEvent(DEV_ONBOARDING_CHANGED));
+  }
 
   async function onTestConnection() {
     setIsLoading(true);
@@ -145,6 +175,60 @@ function LlmSettings() {
       <button type="button" className="settings-action save" onClick={onSaveSettings}>
         Save
       </button>
+
+      {showDevOnboardingTools ? (
+        <div className="llm-settings-dev" aria-label="Developer onboarding shortcuts">
+          <h4 className="llm-settings-dev-title">Developer</h4>
+          <p className="llm-settings-dev-line">
+            Onboarding: <strong>{onboardingCompleteLabel}</strong>
+          </p>
+          <div className="llm-settings-dev-actions">
+            <button
+              type="button"
+              className="settings-action"
+              disabled={onboardingDevBusy}
+              onClick={() => {
+                setOnboardingDevBusy(true);
+                void (async () => {
+                  try {
+                    await setOnboardingComplete(false);
+                    await refreshOnboardingDevState();
+                    setStatus("Onboarding reset: wizard should appear.");
+                  } catch (err) {
+                    setStatus(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setOnboardingDevBusy(false);
+                  }
+                })();
+              }}
+            >
+              Reset onboarding
+            </button>
+            <button
+              type="button"
+              className="settings-action"
+              disabled={onboardingDevBusy}
+              onClick={() => {
+                setOnboardingDevBusy(true);
+                void (async () => {
+                  try {
+                    await setOnboardingComplete(true);
+                    await refreshOnboardingDevState();
+                    setStatus("Onboarding marked complete.");
+                  } catch (err) {
+                    setStatus(err instanceof Error ? err.message : String(err));
+                  } finally {
+                    setOnboardingDevBusy(false);
+                  }
+                })();
+              }}
+            >
+              Mark onboarding done
+            </button>
+          </div>
+          <p className="llm-settings-dev-note">Shown only in dev builds.</p>
+        </div>
+      ) : null}
 
       {status && <p className="pane-status">{status}</p>}
     </aside>

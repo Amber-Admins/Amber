@@ -11,6 +11,7 @@ mod chat;
 mod decay;
 mod ipc_types;
 pub mod llm;
+pub mod onboarding;
 mod privacy;
 use ipc_types::{
     Backlink, Door, DoorCreateInput, Node, NodeCreateInput, NodeUpdateInput, Tag, TagCreateInput,

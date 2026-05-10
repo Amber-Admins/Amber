@@ -11,6 +11,7 @@ import ActiveMemoryPanel from "./components/ActiveMemoryPanel";
 import OnboardingShell from "./components/OnboardingShell";
 import type { ContextAssemblerScope } from "./constants/contextBudget";
 import { refreshAllDecayScores } from "./services/nodes";
+import { DEV_ONBOARDING_CHANGED } from "./constants/devEvents";
 import { getOnboardingComplete, setOnboardingComplete } from "./services/settings";
 import "./App.css";
 
@@ -44,6 +45,25 @@ function App() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    function onDevOnboardingRefresh() {
+      void (async () => {
+        try {
+          const isComplete = await getOnboardingComplete();
+          setNeedsOnboarding(!isComplete);
+          setOnboardingResolved(true);
+          setOnboardingError(null);
+        } catch (error) {
+          setOnboardingError(String(error));
+          setNeedsOnboarding(false);
+          setOnboardingResolved(true);
+        }
+      })();
+    }
+    window.addEventListener(DEV_ONBOARDING_CHANGED, onDevOnboardingRefresh);
+    return () => window.removeEventListener(DEV_ONBOARDING_CHANGED, onDevOnboardingRefresh);
   }, []);
 
   const [selectedVaultId, setSelectedVaultId] = useState<string | null>(null);
