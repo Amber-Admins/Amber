@@ -212,9 +212,11 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
     setLlmProvider(provider);
     if (provider === "ollama") {
       setOllamaEndpoint(ollamaEndpoint);
+      setOllamaEndpointState(getOllamaEndpoint());
       setStatusMessage("Saved Ollama settings.");
     } else {
       setLmStudioEndpoint(lmStudioEndpoint);
+      setLmStudioEndpointState(getLmStudioEndpoint());
       setStatusMessage("Saved LM Studio settings.");
     }
   }

@@ -186,7 +186,7 @@ pub struct DoorCreateInput {
     pub label: Option<String>,
 }
 
-/// Serialized onboarding extraction result for IPC / TypeScript. Enriches `onboarding::ProposedNode` with UI-derived metadata like `resolved_vault_id`.
+/// Serialized onboarding extraction result for IPC / TypeScript. Enriches `onboarding::ProposedNode` with backend-derived metadata for the UI like `resolved_vault_id`.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export, export_to = "../../ui/types/generated/")]
