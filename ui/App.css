@@ -198,6 +198,11 @@ body,
   cursor: pointer;
 }
 
+.onboarding-inline-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .onboarding-review-list {
   display: grid;
   gap: 10px;

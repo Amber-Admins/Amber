@@ -11,4 +11,5 @@ export type OnboardingProposedNode = {
   targetVaultKey?: string;
   tags?: Array<string>;
   nodeType?: string;
+  resolvedVaultId?: string;
 };
