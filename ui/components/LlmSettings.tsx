@@ -119,7 +119,7 @@ function LlmSettings() {
         const nextModel =
           selectedModel && fetchedModels.includes(selectedModel) ? selectedModel : fetchedModels[0];
         setSelectedModel(nextModel);
-        setLlmModel(nextModel);
+        setLlmModel(provider, nextModel);
         setStatus(`Connected. Found ${fetchedModels.length} model(s).`);
       }
     } catch (err) {
@@ -136,16 +136,18 @@ function LlmSettings() {
     setLlmProvider(provider);
     if (provider === "ollama") {
       setOllamaEndpoint(ollamaEndpoint);
+      setOllamaEndpointState(getOllamaEndpoint());
       setStatus("Saved Ollama settings.");
     } else {
       setLmStudioEndpoint(lmStudioEndpoint);
+      setLmStudioEndpointState(getLmStudioEndpoint());
       setStatus("Saved LM Studio settings.");
     }
   }
 
   function onSelectModel(model: string) {
     setSelectedModel(model);
-    setLlmModel(model);
+    setLlmModel(provider, model);
     setStatus("Saved model.");
   }
 
@@ -154,6 +156,7 @@ function LlmSettings() {
     setLlmProvider(nextProvider);
     setModels([]);
     setStatus("");
+    setSelectedModel(getLlmModel(nextProvider));
   }
 
   return (
@@ -195,6 +198,10 @@ function LlmSettings() {
             } else {
               setLmStudioEndpointState(nextValue);
             }
+            setModels([]);
+            setStatus("");
+            setSelectedModel("");
+            setLlmModel(provider, "");
           }}
           placeholder={provider === "ollama" ? "http://localhost:11434" : "http://localhost:1234"}
         />
@@ -211,15 +218,15 @@ function LlmSettings() {
           onChange={(event) => onSelectModel(event.target.value)}
           disabled={models.length === 0}
         >
-          {models.length === 0 ? (
-            <option value="">No models loaded</option>
-          ) : (
-            models.map((model) => (
-              <option key={model} value={model}>
-                {model}
-              </option>
-            ))
-          )}
+          {models.length === 0 ? <option value="">No models loaded</option> : null}
+          {selectedModel && !models.includes(selectedModel) ? (
+            <option value={selectedModel}>{selectedModel} (Saved)</option>
+          ) : null}
+          {models.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
+          ))}
         </select>
       </label>
 

@@ -1,7 +1,7 @@
 const LLM_PROVIDER_KEY = "mindvault.llm.provider";
 const OLLAMA_ENDPOINT_KEY = "mindvault.llm.ollama.endpoint";
 const LMSTUDIO_ENDPOINT_KEY = "mindvault.llm.lmstudio.endpoint";
-const LLM_MODEL_KEY = "mindvault.llm.model";
+const LEGACY_LLM_MODEL_KEY = "mindvault.llm.model";
 const DEFAULT_PROVIDER = "ollama";
 const DEFAULT_OLLAMA_ENDPOINT = "http://localhost:11434";
 const DEFAULT_LMSTUDIO_ENDPOINT = "http://localhost:1234";
@@ -47,10 +47,25 @@ export function setLmStudioEndpoint(url: string): void {
   window.localStorage.setItem(LMSTUDIO_ENDPOINT_KEY, normalized || DEFAULT_LMSTUDIO_ENDPOINT);
 }
 
-export function getLlmModel(): string {
-  return window.localStorage.getItem(LLM_MODEL_KEY) ?? "";
+export function getLlmModel(provider?: string): string {
+  const p = provider || getLlmProvider();
+  const providerKey = `mindvault.llm.${p}.model`;
+  const existing = window.localStorage.getItem(providerKey);
+
+  if (existing) {
+    return existing;
+  }
+
+  const legacy = window.localStorage.getItem(LEGACY_LLM_MODEL_KEY);
+  if (legacy) {
+    window.localStorage.setItem(providerKey, legacy);
+    window.localStorage.removeItem(LEGACY_LLM_MODEL_KEY);
+    return legacy;
+  }
+
+  return "";
 }
 
-export function setLlmModel(model: string): void {
-  window.localStorage.setItem(LLM_MODEL_KEY, model.trim());
+export function setLlmModel(provider: string, model: string): void {
+  window.localStorage.setItem(`mindvault.llm.${provider}.model`, model.trim());
 }

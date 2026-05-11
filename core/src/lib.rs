@@ -1201,6 +1201,17 @@ async fn llm_chat(
 }
 
 fn map_onboarding_proposed(node: crate::onboarding::ProposedNode) -> OnboardingProposedNode {
+    let resolved_vault_id = node
+        .target_vault_key
+        .as_deref()
+        .and_then(crate::onboarding::vault_id_for_category_key)
+        .or_else(|| {
+            node.category
+                .as_deref()
+                .and_then(crate::onboarding::vault_id_for_category_key)
+        })
+        .map(|s| s.to_string());
+
     OnboardingProposedNode {
         title: node.title,
         summary: node.summary,
@@ -1209,6 +1220,7 @@ fn map_onboarding_proposed(node: crate::onboarding::ProposedNode) -> OnboardingP
         target_vault_key: node.target_vault_key,
         tags: node.tags,
         node_type: node.node_type,
+        resolved_vault_id,
     }
 }
 
