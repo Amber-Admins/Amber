@@ -70,10 +70,10 @@ const QUESTION_FIELDS: Array<{
 
 function stepDescription(step: number, stagedCount: number): string {
   if (step === 0) {
-    return "Answer fixed onboarding questions. This data is sent once to the bundled extractor.";
+    return "Answer fixed onboarding questions. This data is sent when you proceed to Review.";
   }
   if (step === 1) {
-    return "Configure the same provider/endpoint/model used by chat. Extraction runs once when you move to Review.";
+    return "Configure the same provider/endpoint/model used by chat. Extraction runs when you move to Review.";
   }
   if (step === 2) {
     return `Review staged proposals before any DB writes. Currently staged: ${stagedCount}.`;
