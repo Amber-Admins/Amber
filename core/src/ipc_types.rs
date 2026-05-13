@@ -12,7 +12,7 @@ pub struct Vault {
     pub icon: Option<String>,
     pub description: Option<String>,
     pub privacy_tier: String,
-    pub decay_rate: String,
+    pub priority_profile: String,
     pub summary_node_id: Option<String>,
     #[ts(type = "number")]
     pub sort_order: i64,
@@ -36,7 +36,7 @@ pub struct VaultCreateInput {
     #[ts(optional)]
     pub privacy_tier: Option<String>,
     #[ts(optional)]
-    pub decay_rate: Option<String>,
+    pub priority_profile: Option<String>,
     #[ts(optional)]
     #[ts(type = "number")]
     pub sort_order: Option<i64>,
@@ -54,7 +54,7 @@ pub struct VaultUpdateInput {
     #[ts(optional)]
     pub privacy_tier: Option<String>,
     #[ts(optional)]
-    pub decay_rate: Option<String>,
+    pub priority_profile: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, TS)]
@@ -71,7 +71,7 @@ pub struct Node {
     pub source: Option<String>,
     pub source_type: Option<String>,
     pub privacy_tier: Option<String>,
-    pub decay: String,
+    pub priority: String,
     #[ts(type = "number")]
     pub version: i64,
     pub is_archived: bool,
@@ -102,7 +102,7 @@ pub struct NodeCreateInput {
     #[ts(optional)]
     pub privacy_tier: Option<String>,
     #[ts(optional)]
-    pub decay: Option<String>,
+    pub priority: Option<String>,
     #[ts(optional)]
     pub meta: Option<String>,
 }
@@ -131,7 +131,7 @@ pub struct NodeUpdateInput {
     #[ts(optional)]
     pub privacy_tier: Option<String>,
     #[ts(optional)]
-    pub decay: Option<String>,
+    pub priority: Option<String>,
     #[ts(optional)]
     pub is_archived: Option<bool>,
     #[ts(optional)]

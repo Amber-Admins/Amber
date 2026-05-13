@@ -177,12 +177,12 @@ export function authVerifyPassword(password: string) {
   return invokeTyped<boolean>("auth_secret_verify", { passphrase: password });
 }
 
-export function decayRefreshAll() {
-  return invokeTyped<number>("decay_refresh_all");
+export function priorityRefreshAll() {
+  return invokeTyped<number>("priority_refresh_all");
 }
 
-export function decayOptimizeAll() {
-  return invokeTyped<number>("decay_optimize_all");
+export function priorityOptimizeAll() {
+  return invokeTyped<number>("priority_optimize_all");
 }
 
 export function debugAssembleContext(nodeIds: string[], scope: string) {

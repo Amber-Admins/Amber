@@ -1,7 +1,7 @@
-// MindVault — Usage-Relative Priority (URP) Decay System
+// MindVault — Usage-Relative Priority (URP) System
 //
-// Nodes do not decay due to the passage of real-world time.
-// A closed app is a frozen system — no state changes, no decay.
+// Nodes are not degraded or forgotten over time.
+// A closed app is a frozen system — no state changes, no priority shifts.
 // "MindVault Time" only advances when the user actively uses the app
 // and generates touches on nodes.
 //
@@ -9,13 +9,13 @@
 // If vault A is active but vault B has no touches, vault B's nodes
 // remain frozen — their access_history does not shift forward.
 
-/// Maximum score a decay rate can achieve.
-fn max_score(rate: &str) -> f64 {
-    match rate {
+/// Maximum score a priority profile can achieve.
+fn max_score(profile: &str) -> f64 {
+    match profile {
         "pinned" => 1.0,
         "slow" => 1.0,
         "fast" => 0.4,
-        // "standard" and any unrecognized rate
+        // "standard" and any unrecognized profile
         _ => 0.8,
     }
 }
@@ -29,16 +29,16 @@ fn max_score(rate: &str) -> f64 {
 ///   if pinned → 1.0
 ///   base = (access_count_30active / 10.0).clamp(0.1, 1.0)
 ///   link_bonus = (link_count * 0.05).clamp(0.0, 0.2)
-///   score = (base + link_bonus).min(rate.max_score())
-pub fn calculate_score(access_count_30active: u64, link_count: u64, rate: &str) -> f64 {
-    if rate == "pinned" {
+///   score = (base + link_bonus).min(profile.max_score())
+pub fn calculate_score(access_count_30active: u64, link_count: u64, profile: &str) -> f64 {
+    if profile == "pinned" {
         return 1.0;
     }
 
     let base = (access_count_30active as f64 / 10.0).clamp(0.1, 1.0);
     let link_bonus = (link_count as f64 * 0.05).clamp(0.0, 0.2);
 
-    (base + link_bonus).min(max_score(rate))
+    (base + link_bonus).min(max_score(profile))
 }
 
 const MAX_HISTORY_LEN: usize = 90;
@@ -56,22 +56,22 @@ const MAX_HISTORY_LEN: usize = 90;
 /// nodes in an active vault naturally lose priority relative to their
 /// siblings that ARE being accessed.
 pub fn calculate_rollover(
-    mut decay_json: serde_json::Value,
+    mut priority_json: serde_json::Value,
     vault_is_active: bool,
 ) -> serde_json::Value {
-    let today = decay_json
+    let today = priority_json
         .get("today_touches")
         .and_then(|v| v.as_u64())
         .unwrap_or(0);
 
     // Vault frozen — reset today_touches but do not advance history.
     if !vault_is_active {
-        decay_json["today_touches"] = serde_json::json!(0);
-        return decay_json;
+        priority_json["today_touches"] = serde_json::json!(0);
+        return priority_json;
     }
 
     // Vault is active — time is ticking. Push today_touches (even 0).
-    let mut history: Vec<u64> = decay_json
+    let mut history: Vec<u64> = priority_json
         .get("access_history")
         .and_then(|v| v.as_array())
         .map(|arr| arr.iter().filter_map(|item| item.as_u64()).collect())
@@ -83,12 +83,12 @@ pub fn calculate_rollover(
     let access_30d: u64 = history.iter().take(30).sum();
     let access_90d: u64 = history.iter().sum();
 
-    decay_json["today_touches"] = serde_json::json!(0);
-    decay_json["access_history"] = serde_json::json!(history);
-    decay_json["access_count_30active"] = serde_json::json!(access_30d);
-    decay_json["access_count_90active"] = serde_json::json!(access_90d);
+    priority_json["today_touches"] = serde_json::json!(0);
+    priority_json["access_history"] = serde_json::json!(history);
+    priority_json["access_count_30active"] = serde_json::json!(access_30d);
+    priority_json["access_count_90active"] = serde_json::json!(access_90d);
 
-    decay_json
+    priority_json
 }
 
 #[cfg(test)]

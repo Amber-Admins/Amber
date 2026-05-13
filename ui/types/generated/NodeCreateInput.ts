@@ -10,6 +10,6 @@ export type NodeCreateInput = {
   source?: string;
   sourceType?: string;
   privacyTier?: string;
-  decay?: string;
+  priority?: string;
   meta?: string;
 };
