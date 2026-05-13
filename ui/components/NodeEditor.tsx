@@ -323,6 +323,10 @@ function NodeEditor({
     const timer = window.setTimeout(() => {
       void (async () => {
         try {
+          const freshNodeForSave = await getNode(selectedNodeId);
+          if (!freshNodeForSave) {
+            throw new Error("Node was deleted before save could complete.");
+          }
           const updated = await updateNode({
             id: selectedNodeId,
             title: editTitle,
@@ -333,7 +337,9 @@ function NodeEditor({
               ...(() => {
                 try {
                   const p =
-                    typeof node.priority === "string" ? JSON.parse(node.priority) : node.priority;
+                    typeof freshNodeForSave.priority === "string"
+                      ? JSON.parse(freshNodeForSave.priority)
+                      : freshNodeForSave.priority;
                   return typeof p === "object" && p !== null ? p : {};
                 } catch {
                   return {};
