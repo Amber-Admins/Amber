@@ -1474,12 +1474,45 @@ fn onboarding_commit(
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .unwrap_or("concept");
+
+            let valid_node_types = [
+                "concept",
+                "fact",
+                "project",
+                "preference",
+                "event",
+                "instruction",
+                "identity",
+                "summary",
+            ];
+            if !valid_node_types.contains(&node_type) {
+                return Err(format!(
+                    "Invalid node_type '{}'. Must be one of {:?}",
+                    node_type, valid_node_types
+                ));
+            }
+
             let source_type = proposal
                 .source_type
                 .as_deref()
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .unwrap_or("onboarding");
+
+            let valid_source_types = [
+                "manual",
+                "pdf_import",
+                "transcript_import",
+                "ai_transfer",
+                "agent_extract",
+                "onboarding",
+            ];
+            if !valid_source_types.contains(&source_type) {
+                return Err(format!(
+                    "Invalid source_type '{}'. Must be one of {:?}",
+                    source_type, valid_source_types
+                ));
+            }
             let detail = proposal
                 .detail
                 .as_deref()
