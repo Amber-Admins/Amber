@@ -49,12 +49,9 @@
   transition: background 120ms ease;
 }
 
-.chat-clear-btn:hover {
+.chat-clear-btn:hover:not(:disabled) {
   border: 1px solid var(--primary-color);
   color: var(--primary-color);
-}
-
-.chat-clear-btn:hover:not(:disabled) {
   background: rgba(255, 255, 255, 0.12);
 }
 

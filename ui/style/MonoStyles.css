@@ -8,6 +8,8 @@
 @import "./components/NodeEditor.css";
 @import "./components/NodeList.css";
 @import "./components/OnboardingShell.css";
+@import "./components/PriorityBar.css";
 @import "./components/PriorityDashboard.css";
+@import "./components/PrivacyBadge.css";
 @import "./components/ScopeIndicator.css";
 @import "./components/VaultSidebar.css";

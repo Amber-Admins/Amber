@@ -269,36 +269,6 @@
   min-height: 220px;
 }
 
-.connections-section {
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-  background: rgba(10, 14, 24, 0.6);
-  padding: 10px;
-  display: grid;
-  gap: 10px;
-}
-
-.connections-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.connections-header h4 {
-  margin: 0;
-  font-size: 0.9rem;
-  color: #d0daf5;
-}
-
-.connections-header button {
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  color: #d4e2ff;
-  padding: 6px 10px;
-  cursor: pointer;
-}
-
 .door-list {
   display: grid;
   gap: 6px;
@@ -432,45 +402,6 @@
   margin: 0;
   font-size: 0.82rem;
   color: #ff8b8b;
-}
-
-.tag-input {
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 10px;
-  background: rgba(5, 8, 14, 0.55);
-  color: #eff3ff;
-  padding: 8px 10px;
-  font-size: 0.9rem;
-}
-
-.tag-dropdown {
-  position: absolute;
-  left: 0;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 50;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 10px;
-  background: rgba(12, 16, 28, 0.98);
-  padding: 6px;
-  display: grid;
-  gap: 4px;
-}
-
-.tag-dropdown button {
-  width: 100%;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: #d2dcf5;
-  text-align: left;
-  cursor: pointer;
-  padding: 6px 8px;
-}
-
-.tag-dropdown button:hover {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.06);
 }
 
 /* -----------------------------------------------------------------------
