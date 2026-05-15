@@ -456,6 +456,106 @@
   color: #7f97c9;
 }
 
+/* -----------------------------------------------------------------------
+   Structured Tree Navigation — search dimming, path highlighting, inline nodes
+   ----------------------------------------------------------------------- */
+
+/* Search result count badge */
+.search-result-count {
+  margin: -6px 0 8px;
+  font-size: 0.78rem;
+  color: #8fa8d4;
+  letter-spacing: 0.02em;
+}
+
+/* Dim non-matching tree items — smooth transition so items fade in/out */
+.tree-dimmed {
+  opacity: 0.3;
+  pointer-events: auto;
+  transition: opacity 0.22s ease;
+}
+
+.tree-dimmed:hover {
+  opacity: 0.55;
+}
+
+/* Highlight matching tree items with a subtle left-border accent */
+.tree-match {
+  border-left: 2px solid rgba(111, 190, 255, 0.7);
+  border-radius: 0;
+}
+
+.tree-match .list-main {
+  border-color: rgba(111, 190, 255, 0.4);
+  background: rgba(111, 190, 255, 0.08);
+}
+
+/* Inline node list under vault/sub-vault tree entries */
+.tree-node-list {
+  list-style: none;
+  margin: 4px 0 2px;
+  padding: 0 0 0 32px;
+  display: grid;
+  gap: 4px;
+}
+
+.tree-node-item {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: #d0daf2;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 6px 9px;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.tree-node-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tree-node-item.tree-match {
+  border-left: 2px solid rgba(111, 190, 255, 0.7);
+  background: rgba(111, 190, 255, 0.06);
+}
+
+.tree-node-icon {
+  font-size: 0.78rem;
+  line-height: 1.2rem;
+  flex-shrink: 0;
+}
+
+.tree-node-text {
+  display: grid;
+  gap: 1px;
+  width: 100%;
+  min-width: 0;
+}
+
+.tree-node-text strong {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #d8e3ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-node-text small {
+  color: #97a7cb;
+  font-size: 0.74rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .list-item small {
   color: #b8c0d9;
 }
@@ -502,6 +602,262 @@
   margin: 0;
   color: #c3cae2;
   font-size: 0.92rem;
+}
+
+.editor-form {
+  display: grid;
+  gap: 10px;
+}
+
+.editor-breadcrumb {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #8fa0c8;
+}
+
+.tag-wrapper {
+  position: relative;
+  display: grid;
+  gap: 8px;
+}
+
+.tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(143, 184, 255, 0.25);
+  background: rgba(143, 184, 255, 0.1);
+  color: #dbe7ff;
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 0.78rem;
+}
+
+.tag-pill button {
+  border: none;
+  background: transparent;
+  color: #dbe7ff;
+  cursor: pointer;
+  font-size: 0.82rem;
+  line-height: 1;
+  padding: 0;
+}
+
+.tag-input {
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(5, 8, 14, 0.55);
+  color: #eff3ff;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+}
+
+.tag-dropdown {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 50;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 10px;
+  background: rgba(12, 16, 28, 0.98);
+  padding: 6px;
+  display: grid;
+  gap: 4px;
+}
+
+.tag-dropdown button {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #d2dcf5;
+  text-align: left;
+  cursor: pointer;
+  padding: 6px 8px;
+}
+
+.tag-dropdown button:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* -----------------------------------------------------------------------
+   Wikilink [[NodeName]] autocomplete dropdown
+   ----------------------------------------------------------------------- */
+
+.wikilink-wrapper {
+  position: relative;
+}
+
+.wikilink-dropdown {
+  z-index: 60;
+  min-width: 220px;
+  max-width: 320px;
+  border: 1px solid rgba(111, 190, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(10, 14, 26, 0.96);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+  display: grid;
+  gap: 3px;
+}
+
+.wikilink-dropdown-header {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #7a95c4;
+  padding: 4px 8px 2px;
+}
+
+.wikilink-option {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #d2dcf5;
+  text-align: left;
+  cursor: pointer;
+  padding: 6px 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.wikilink-option:hover {
+  border-color: rgba(111, 190, 255, 0.4);
+  background: rgba(111, 190, 255, 0.1);
+}
+
+.wikilink-option-icon {
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  line-height: 1.3rem;
+}
+
+.wikilink-option-text {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.wikilink-option-text strong {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #dce7ff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wikilink-option-text small {
+  font-size: 0.74rem;
+  color: #97a7cb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connections-section {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  background: rgba(10, 14, 24, 0.6);
+  padding: 10px;
+  display: grid;
+  gap: 10px;
+}
+
+.connections-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.connections-header h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #d0daf5;
+}
+
+.connections-header button {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #d4e2ff;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.door-list {
+  display: grid;
+  gap: 6px;
+}
+
+.door-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+}
+
+.door-item.orphaned {
+  border-color: rgba(255, 125, 125, 0.35);
+  background: rgba(255, 86, 86, 0.08);
+}
+
+.door-item button {
+  border: none;
+  background: transparent;
+  color: #cfd9f4;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.door-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.door-repoint {
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #e6eefc !important;
+  font-size: 0.76rem !important;
+  line-height: 1;
+  padding: 5px 8px !important;
+  cursor: pointer;
+}
+
+.door-main {
+  display: grid;
+  gap: 2px;
+}
+
+.door-main strong {
+  font-size: 0.85rem;
+  color: #e2e9ff;
+}
+
+.door-label {
+  font-size: 0.76rem;
+  color: #9cadcf;
 }
 
 .door-orphan-badge {
