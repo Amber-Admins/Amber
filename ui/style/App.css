@@ -1,5 +1,3 @@
-@import "./Shared.css";
-
 .hybrid-shell {
   position: relative;
   min-height: 100vh;
@@ -118,6 +116,7 @@
 .pane {
   height: 100%;
   background: rgba(17, 20, 31, 0.88);
+  color: #e2e8f0;
   border-right: 1px solid rgba(255, 255, 255, 0.08);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(12px);

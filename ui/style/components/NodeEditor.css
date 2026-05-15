@@ -1,5 +1,3 @@
-@import "../Shared.css";
-
 .editor-actions {
   display: flex;
   gap: 8px;
@@ -332,6 +330,11 @@
 .door-label {
   font-size: 0.76rem;
   color: #9cadcf;
+}
+
+.door-orphan-badge {
+  font-size: 0.73rem;
+  color: #ff8a8a;
 }
 
 .door-picker {
