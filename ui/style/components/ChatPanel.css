@@ -304,12 +304,14 @@
   gap: 12px;
   justify-content: center;
   align-items: center;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: 100%;
 }
 
 .zen-pill-container {
   position: relative;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .zen-pill {
@@ -326,6 +328,8 @@
   font-weight: 500;
   cursor: pointer;
   transition: all 180ms ease;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .zen-pill:hover {
@@ -344,10 +348,12 @@
 .zen-pill-icon {
   font-size: 0.9rem;
   opacity: 0.85;
+  flex-shrink: 0;
 }
 
 .zen-pill-label {
   color: rgba(27, 26, 23, 0.55);
+  flex-shrink: 0;
 }
 
 .zen-pill-value {
@@ -356,7 +362,9 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 120px;
+  max-width: min(280px, 30vw);
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .zen-pill-chevron {
@@ -364,6 +372,7 @@
   opacity: 0.5;
   margin-left: 2px;
   transition: transform 150ms ease;
+  flex-shrink: 0;
 }
 
 .zen-pill.active .zen-pill-chevron {
@@ -379,8 +388,8 @@
   z-index: 100;
   width: max-content;
   min-width: 240px;
-  max-width: 320px;
-  max-height: 280px;
+  max-width: min(480px, 85vw);
+  max-height: min(320px, 45vh);
   overflow-y: auto;
   border-radius: 12px;
   border: 1px solid rgba(188, 108, 37, 0.15);
@@ -396,7 +405,7 @@
 }
 
 .zen-dropdown.models-dropdown {
-  min-width: 260px;
+  min-width: min(380px, 80vw);
 }
 
 .zen-dropdown-header {
@@ -458,6 +467,10 @@
 .item-text {
   font-size: 0.84rem;
   flex-grow: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .item-badge {
@@ -475,11 +488,16 @@
   flex-direction: column;
   gap: 1px;
   line-height: 1.2;
+  min-width: 0;
+  flex-grow: 1;
 }
 
 .item-title {
   font-size: 0.82rem;
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .item-desc {
