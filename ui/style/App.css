@@ -76,6 +76,21 @@
   box-shadow: 0 4px 12px rgba(188, 108, 37, 0.12);
 }
 
+.sidebar-toggle-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 0 2px 8px rgba(188, 108, 37, 0.03);
+}
+
+.sidebar-toggle-btn:disabled:hover {
+  background: rgba(250, 249, 247, 0.85);
+  border-color: rgba(188, 108, 37, 0.18);
+  color: var(--primary-color);
+  transform: none;
+  box-shadow: 0 2px 8px rgba(188, 108, 37, 0.03);
+}
+
 .sidebar-toggle-btn.left {
   left: 16px;
 }

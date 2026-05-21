@@ -138,13 +138,14 @@ function App() {
   const [vaultRefreshKey, setVaultRefreshKey] = useState<number>(0);
   const [nodeRefreshKey, setNodeRefreshKey] = useState<number>(0);
   const [isRedactedUnlocked, setIsRedactedUnlocked] = useState<boolean>(false);
+  const [selectedVaultRequiresUnlock, setSelectedVaultRequiresUnlock] = useState<boolean>(false);
   const [showDashboard, setShowDashboard] = useState<boolean>(false);
   const [showSettings, setShowSettings] = useState<boolean>(false);
   const [sidebarModalOpen, setSidebarModalOpen] = useState<boolean>(false);
   const [editorModalOpen, setEditorModalOpen] = useState<boolean>(false);
   const [spatialModalOpen, setSpatialModalOpen] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<"chat" | "spatial">("chat");
-  const leftPaneExpanded = leftPanePinned;
+  const leftPaneExpanded = leftPanePinned && !selectedVaultRequiresUnlock;
   const rightPaneExpanded = rightPanePinned;
   const scopeNodeIds = useMemo(() => (selectedNodeId ? [selectedNodeId] : []), [selectedNodeId]);
   const [assemblerScope, setAssemblerScope] = useState<ContextAssemblerScope>("local");
@@ -202,7 +203,9 @@ function App() {
   };
 
   function closeAllPanes() {
-    setLeftPanePinned(false);
+    if (!leftPanePinned) {
+      setLeftPanePinned(false);
+    }
     setRightPanePinned(false);
   }
 
@@ -213,6 +216,15 @@ function App() {
   }
 
   function onSelectVault(vaultId: string | null) {
+    setSelectedVaultId(vaultId);
+    setSelectedNodeId(null);
+    setShowDashboard(false);
+    setShowSettings(false);
+    setLeftPanePinned(Boolean(vaultId));
+    setNodeRefreshKey((value) => value + 1);
+  }
+
+  function onFocusVault(vaultId: string | null) {
     setSelectedVaultId(vaultId);
     setSelectedNodeId(null);
     setShowDashboard(false);
@@ -359,6 +371,7 @@ function App() {
                   selectedVaultId={selectedVaultId}
                   selectedNodeId={selectedNodeId}
                   onSelectVault={onSelectVault}
+                  onFocusVault={onFocusVault}
                   onSelectNode={onSelectNode}
                   refreshKey={vaultRefreshKey + nodeRefreshKey}
                   onVaultCreated={onVaultCreated}
@@ -368,7 +381,11 @@ function App() {
                   onNodeDeleted={onNodeDeleted}
                   onNodeUpdated={onNodeUpdated}
                   isRedactedUnlocked={isRedactedUnlocked}
+                  setIsRedactedUnlocked={setIsRedactedUnlocked}
+                  onSelectedVaultRequiresUnlockChange={setSelectedVaultRequiresUnlock}
                   onModalToggle={setSpatialModalOpen}
+                  isLeftPanePinned={leftPanePinned}
+                  onLeftPanePinChange={setLeftPanePinned}
                 />
               ) : (
                 <ChatPanel
@@ -466,10 +483,22 @@ function App() {
             {/* Left Sidebar Toggle Button */}
             <button
               className={`sidebar-toggle-btn left ${leftPaneExpanded || sidebarModalOpen ? "open" : ""}`}
-              onClick={() => setLeftPanePinned(!leftPanePinned)}
+              onClick={() => {
+                if (selectedVaultRequiresUnlock) {
+                  return;
+                }
+                setLeftPanePinned(!leftPanePinned);
+              }}
               style={leftToggleStyle}
-              title={leftPanePinned ? "Collapse Left Panel" : "Pin Left Panel"}
+              title={
+                selectedVaultRequiresUnlock
+                  ? "Unlock redacted vault first"
+                  : leftPanePinned
+                    ? "Collapse Left Panel"
+                    : "Pin Left Panel"
+              }
               aria-label="Toggle left panel"
+              disabled={selectedVaultRequiresUnlock}
             >
               <svg
                 width="18"

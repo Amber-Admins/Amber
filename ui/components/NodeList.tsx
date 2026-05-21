@@ -185,8 +185,8 @@ function NodeList({
     if (!selectedVault) {
       return [];
     }
-    return nodes.filter((node) => node.vaultId === selectedVault.id && !node.subVaultId);
-  }, [nodes, selectedVault]);
+    return nodesByContainer.get(selectedVault.id) ?? [];
+  }, [nodesByContainer, selectedVault]);
 
   const backButtonLabel = selectedVault?.parentVaultId
     ? `← Back to ${getVaultDisplayLabel(selectedVault.parentVaultId, vaultById, isRedactedUnlocked)}`
@@ -348,9 +348,11 @@ function NodeList({
               vault.description && <small>{vault.description}</small>
             )}
           </span>
-          <PrivacyBadge tier={effectiveTier} />
-          {isLocked && <span className="privacy-lock-icon">🔒</span>}
-          <span className="vault-card-chevron">›</span>
+          <span className="vault-card-meta">
+            <PrivacyBadge tier={effectiveTier} />
+            {isLocked && <span className="privacy-lock-icon">🔒</span>}
+            <span className="vault-card-chevron">›</span>
+          </span>
         </button>
 
         {childVaults.length > 0 && (

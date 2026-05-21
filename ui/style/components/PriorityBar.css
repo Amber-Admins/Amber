@@ -8,6 +8,11 @@
   flex-shrink: 0;
 }
 
+.priority-bar-compact {
+  width: 56px;
+  height: 7px;
+}
+
 .priority-bar-fill {
   height: 100%;
   border-radius: 4px;

@@ -1098,7 +1098,7 @@ fn vault_update_position(
 
         let current_meta: String = tx
             .query_row(
-                "SELECT ui_metadata FROM (
+                "SELECT COALESCE(ui_metadata, '{}') FROM (
                     SELECT ui_metadata FROM vaults WHERE id = ?1 AND deleted_at IS NULL
                     UNION ALL
                     SELECT ui_metadata FROM sub_vaults WHERE id = ?1 AND deleted_at IS NULL

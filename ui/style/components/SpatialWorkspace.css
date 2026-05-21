@@ -23,7 +23,6 @@
   width: 100%;
   height: 100%;
   transform-origin: 0 0;
-  will-change: transform;
 }
 
 /* Glassmorphic header controls */
@@ -52,6 +51,45 @@
   color: #b56a37;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.spatial-header-lock-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  border-radius: 999px;
+  border: 1px solid rgba(188, 108, 37, 0.18);
+  background: rgba(255, 255, 255, 0.75);
+  color: #7d7a75;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+  font-size: 0.9rem;
+}
+
+.spatial-header-lock-btn:hover {
+  background: rgba(188, 108, 37, 0.08);
+  border-color: #b56a37;
+  color: #1b1a17;
+  transform: translateY(-1px);
+}
+
+.spatial-header-lock-btn.active {
+  background: rgba(181, 106, 55, 0.1);
+  border-color: rgba(181, 106, 55, 0.35);
+  color: #b56a37;
+}
+
+.spatial-header-lock-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .spatial-header-btn {
@@ -207,19 +245,27 @@
     0 0 0 1px rgba(229, 62, 62, 0.1) !important;
 }
 
+.spatial-redacted-content-locked {
+  filter: blur(2px);
+  opacity: 0.72;
+  pointer-events: none;
+  user-select: none;
+}
+
+.spatial-redacted-card-locked .spatial-card-bottom-actions {
+  filter: none;
+  opacity: 1;
+  pointer-events: auto;
+  user-select: auto;
+}
+
 /* Privacy styling for Locked states (Slate/Amber dashed theme) */
 .spatial-locked-card {
   border-style: dashed !important;
-  border-color: rgba(188, 108, 37, 0.4) !important; /* Subtle amber */
-  background: rgba(245, 243, 240, 0.96) !important; /* Muted warm background */
-  box-shadow: 0 4px 16px rgba(125, 122, 117, 0.05) !important;
 }
 
 .spatial-locked-card.active-selection {
-  border-color: rgba(188, 108, 37, 0.75) !important;
-  box-shadow:
-    0 8px 24px rgba(188, 108, 37, 0.12),
-    0 0 0 1px rgba(188, 108, 37, 0.1) !important;
+  border-style: dashed !important;
 }
 
 /* Privacy styling for Locked state nodes (Readable, slightly muted with lock) */
@@ -728,34 +774,6 @@
   pointer-events: auto;
 }
 
-/* 3. Node Pill Badges (Pin, Context, and Doors) */
-.spatial-node-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  border-radius: 8px;
-  padding: 1px 6px;
-  margin-left: 6px;
-  text-transform: lowercase;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-.spatial-node-badge.badge-pin {
-  background-color: #fef3c7;
-  color: #d97706;
-  border: 1px solid rgba(217, 119, 6, 0.2);
-}
-.spatial-node-badge.badge-ctx {
-  background-color: #f3f4f6;
-  color: #4b5563;
-  border: 1px solid rgba(75, 85, 99, 0.15);
-}
-.spatial-node-badge.badge-door {
-  background-color: #dbeafe;
-  color: #2563eb;
-  border: 1px solid rgba(37, 99, 235, 0.2);
-}
-
 /* 4. Card Header Count & Locked Badges and Bottom Actions Layout */
 .spatial-card-header-right {
   display: flex;
@@ -831,7 +849,7 @@
   z-index: 10;
   pointer-events: auto;
   width: 90%;
-  max-width: 480px;
+  max-width: 620px;
   height: 48px;
 }
 
@@ -859,8 +877,28 @@
   width: 1px;
   height: 20px;
   background: rgba(188, 108, 37, 0.15);
-  margin: 0 16px;
+  margin: 0 12px;
   flex-shrink: 0;
+}
+
+.spatial-pill-create-btn {
+  background: transparent;
+  border: 1px solid rgba(188, 108, 37, 0.2);
+  color: #5c5954;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 999px;
+  transition: all 120ms ease;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.spatial-pill-create-btn:hover {
+  color: #1b1a17;
+  background: rgba(188, 108, 37, 0.08);
+  border-color: #b56a37;
 }
 
 .spatial-pill-reset-btn {
