@@ -111,23 +111,140 @@ pub fn check_rate_limit(key: &str) -> Result<(), String> {
     Ok(())
 }
 
-async fn execute_memory_extraction_pipeline(
+pub fn is_node_private(conn: &Connection, node_id: &str) -> Result<bool, String> {
+    let node_info = conn
+        .query_row(
+            "SELECT n.vault_id, n.sub_vault_id, COALESCE(o.privacy_tier, n.privacy_tier)
+             FROM nodes n
+             LEFT JOIN privacy_overrides o ON n.id = o.node_id
+             WHERE n.id = ?1 AND n.deleted_at IS NULL
+             LIMIT 1;",
+            [node_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            },
+        )
+        .ok();
+
+    let (vault_id, sub_vault_id, privacy_tier) = match node_info {
+        Some(info) => info,
+        None => return Ok(false), // Node doesn't exist or is deleted
+    };
+
+    let effective = resolve_node_effective_privacy(
+        conn,
+        &vault_id,
+        sub_vault_id.as_deref(),
+        privacy_tier.as_deref(),
+    )?;
+
+    Ok(effective == "redacted" || effective == "locked")
+}
+
+pub fn log_memory_agent_error(conn: &Connection, raw_response: &str) -> Result<(), String> {
+    let existing_str: Option<String> = conn
+        .query_row(
+            "SELECT value FROM settings WHERE key = 'memory_agent_errors' LIMIT 1;",
+            [],
+            |row| row.get(0),
+        )
+        .ok();
+
+    let mut errors: Vec<String> = match existing_str {
+        Some(s) => serde_json::from_str(&s).unwrap_or_default(),
+        None => Vec::new(),
+    };
+
+    errors.push(raw_response.to_string());
+
+    if errors.len() > 5 {
+        let skip_count = errors.len() - 5;
+        errors = errors.into_iter().skip(skip_count).collect();
+    }
+
+    let new_str = serde_json::to_string(&errors)
+        .map_err(|err| format!("Failed to serialize memory agent errors: {err}"))?;
+
+    conn.execute(
+        "INSERT INTO settings (key, value, scope, updated_at)
+         VALUES ('memory_agent_errors', ?1, 'global', datetime('now'))
+         ON CONFLICT(key) DO UPDATE
+         SET value = excluded.value,
+             updated_at = datetime('now');",
+        [new_str],
+    )
+    .map_err(|err| format!("Failed to write memory_agent_errors setting: {err}"))?;
+
+    Ok(())
+}
+
+pub async fn execute_memory_extraction_pipeline(
     provider: String,
     endpoint: String,
     model: String,
     db_path: PathBuf,
 ) -> Result<Changeset, String> {
-    // 1. Load chat history synchronously within scoped block to drop connection before await
+    // 1. Load and filter chat history synchronously within scoped block to drop connection before await
     let chat_history = {
         let conn = open_connection(&db_path)?;
-        let history = chat::get_chat_history(&conn)?;
-        if history.len() < 3 {
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, role, content, node_refs, created_at
+                 FROM session_messages
+                 WHERE session_id = 'default-session'
+                 ORDER BY created_at ASC, id ASC;",
+            )
+            .map_err(|err| format!("Failed preparing session_messages query: {err}"))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                ))
+            })
+            .map_err(|err| format!("Failed querying session_messages: {err}"))?;
+
+        let mut raw_messages = Vec::new();
+        for r in rows {
+            raw_messages.push(r.map_err(|err| format!("Failed reading message row: {err}"))?);
+        }
+
+        let mut filtered_history = Vec::new();
+        for (id, role, content, node_refs_json, created_at) in raw_messages {
+            let node_ids: Vec<String> = serde_json::from_str(&node_refs_json).unwrap_or_default();
+            let mut has_private_ref = false;
+            for node_id in &node_ids {
+                if is_node_private(&conn, node_id)? {
+                    has_private_ref = true;
+                    break;
+                }
+            }
+            if !has_private_ref {
+                filtered_history.push(chat::ChatMessage {
+                    id,
+                    role,
+                    content,
+                    created_at,
+                });
+            }
+        }
+
+        if filtered_history.len() < 3 {
             return Err(
                 "Insufficient chat history (need at least 3 messages) to extract memory."
                     .to_string(),
             );
         }
-        history
+        filtered_history
     };
 
     // 2. Format conversation
@@ -169,7 +286,65 @@ async fn execute_memory_extraction_pipeline(
     .await?;
 
     // 6. Parse response
-    let candidates = memory_agent::parser::parse_candidates_json(&raw)?;
+    let candidates = match memory_agent::parser::parse_candidates_json(&raw) {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("Failed to parse candidates JSON, logging raw response and recovering gracefully: {err}");
+            // Log raw response as a memory_agent_errors settings key
+            let conn = open_connection(&db_path)?;
+            if let Err(log_err) = log_memory_agent_error(&conn, &raw) {
+                eprintln!("Failed to log memory agent error: {log_err}");
+            }
+            // Return an empty changeset gracefully!
+            let changeset_id = {
+                let mut conn = open_connection(&db_path)?;
+                let tx = conn
+                    .transaction()
+                    .map_err(|err| format!("Failed to start transaction: {err}"))?;
+
+                let pending_changeset = memory_agent::PendingChangeset {
+                    session_id: "default-session".to_string(),
+                    model_used: Some(model.clone()),
+                    items: Vec::new(),
+                };
+
+                let persisted_id = memory_agent::persistence::persist_changeset(
+                    &tx,
+                    &pending_changeset,
+                    Some(&model),
+                )?;
+
+                tx.commit()
+                    .map_err(|err| format!("Failed to commit transaction: {err}"))?;
+                persisted_id
+            };
+
+            // Retrieve the newly persisted empty changeset from SQLite
+            let conn = open_connection(&db_path)?;
+            let cs = conn.query_row(
+                "SELECT id, session_id, status, item_count, accepted_count, dismissed_count, model_used, created_at, reviewed_at
+                 FROM changesets
+                 WHERE id = ?1 LIMIT 1;",
+                [changeset_id],
+                |row| {
+                    Ok(Changeset {
+                        id: row.get(0)?,
+                        session_id: row.get(1)?,
+                        status: row.get(2)?,
+                        item_count: row.get(3)?,
+                        accepted_count: row.get(4)?,
+                        dismissed_count: row.get(5)?,
+                        model_used: row.get(6)?,
+                        created_at: row.get(7)?,
+                        reviewed_at: row.get(8)?,
+                    })
+                },
+            )
+            .map_err(|err| format!("Failed to retrieve persisted empty changeset: {err}"))?;
+
+            return Ok(cs);
+        }
+    };
 
     // 7. Open connection synchronously and persist changeset inside a Transaction
     let changeset_id = {

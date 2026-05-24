@@ -23,24 +23,37 @@ const ALLOWED_VAULT_KEYS: [&str; 8] = [
     "credentials",
 ];
 
+/// The requested action classification of a parsed memory candidate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum CandidateAction {
+    /// Add the candidate as a brand new node.
     #[default]
     Add,
+    /// Update an existing node with the candidate's content.
     Update,
+    /// Delete an existing node matching the candidate.
     Delete,
 }
 
+/// A parsed candidate memory extracted from LLM session completions.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct CandidateNode {
+    /// The short, descriptive title of the candidate node.
     pub title: String,
+    /// The concise summary describing the candidate memory.
     pub summary: String,
+    /// The detailed markdown content/notes of the candidate, if any.
     pub detail: Option<String>,
+    /// The specific category type (e.g. concept, fact, project).
     pub node_type: Option<String>,
+    /// The category vault key (e.g. learning, health, personal) targeting a specific vault.
     pub target_vault_key: Option<String>,
+    /// Associated tags describing this candidate memory.
     pub tags: Option<Vec<String>>,
+    /// Confidence score assigned by the LLM extractor (clamped to 0.0 - 1.0).
     pub confidence: f64,
+    /// The action to perform (Add, Update, or Delete).
     pub action: CandidateAction,
 }
 
@@ -148,7 +161,9 @@ fn normalize_tags(tags: Option<Vec<String>>, index: usize) -> Result<Option<Vec<
     }
 }
 
-/// Parse strict memory extraction candidate JSON.
+/// Parses and validates a raw strict JSON string representing memory extraction candidates.
+///
+/// Enforces correct structures, node types, target vault keys, and normalizes tags and confidence scores.
 pub fn parse_candidates_json(raw_json: &str) -> Result<Vec<CandidateNode>, String> {
     let envelope: CandidateEnvelope =
         serde_json::from_str(raw_json).map_err(|err| format!("Invalid candidates JSON: {err}"))?;
@@ -182,7 +197,7 @@ pub fn parse_candidates_json(raw_json: &str) -> Result<Vec<CandidateNode>, Strin
         .collect()
 }
 
-/// Normalize and parse LLM-generated memory candidates output (removes fences if present).
+/// Normalizes raw LLM output (removing markdown code blocks/fences) and parses candidate nodes.
 pub fn parse_candidates_from_llm_output(
     raw_model_output: &str,
 ) -> Result<Vec<CandidateNode>, String> {

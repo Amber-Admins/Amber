@@ -5,31 +5,47 @@ use crate::memory_agent::similarity::{
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
 
+/// The type of action proposed by an individual item in a changeset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChangesetItemType {
+    /// Add a completely new node to the knowledge base.
     Add,
+    /// Update an existing node with new/divergent information.
     Update,
+    /// Merge a candidate with an existing node to combine highly similar info.
     Merge,
+    /// Delete an existing node from the knowledge base.
     Delete,
 }
 
+/// An individual proposed action (Add, Update, Merge, or Delete) inside a changeset.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingChangesetItem {
+    /// The action type (Add, Update, Merge, or Delete).
     pub item_type: ChangesetItemType,
+    /// The ID of the target node, if updating, merging, or deleting.
     pub target_node_id: Option<String>,
+    /// Serialized JSON string of the proposed node data.
     pub proposed_data: String,
+    /// Serialized JSON string of the existing node data, if applicable.
     pub existing_data: Option<String>,
+    /// Calculated Jaccard text similarity score, if matched with an existing node.
     pub similarity: Option<f64>,
+    /// The ID of the node to merge this item with, if applicable.
     pub merge_with_id: Option<String>,
 }
 
+/// A collection of pending proposed changes to the knowledge base extracted from an LLM session.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingChangeset {
+    /// The chat session ID associated with this background extraction.
     pub session_id: String,
+    /// The name of the LLM used to compile the candidates.
     pub model_used: Option<String>,
+    /// The individual proposed items in the changeset.
     pub items: Vec<PendingChangesetItem>,
 }
 
