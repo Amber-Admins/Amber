@@ -307,6 +307,7 @@ type ChatPanelProps = {
   onOpenSettings?: () => void;
   onModalToggle?: (isOpen: boolean) => void;
   onSelectNode?: (nodeId: string) => void;
+  onRefreshPendingCount?: () => void;
 };
 
 function ChatPanel({
@@ -317,6 +318,7 @@ function ChatPanel({
   onOpenSettings,
   onModalToggle,
   onSelectNode,
+  onRefreshPendingCount,
 }: ChatPanelProps) {
   const MAX_RENDERED_MESSAGES = 60;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -559,9 +561,15 @@ function ChatPanel({
       await chatAppendMessage(aiMsgId, "assistant", aiResponse);
 
       // Fire-and-forget background extraction check (non-blocking for the user)
-      extractMemoryIfReady(provider, endpoint, model).catch((err) => {
-        console.error("Background memory extraction check failed:", err);
-      });
+      extractMemoryIfReady(provider, endpoint, model)
+        .then((changeset) => {
+          if (changeset && onRefreshPendingCount) {
+            onRefreshPendingCount();
+          }
+        })
+        .catch((err) => {
+          console.error("Background memory extraction check failed:", err);
+        });
     } catch (error) {
       setStatus(String(error));
     } finally {

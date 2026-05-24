@@ -1,7 +1,9 @@
 .hybrid-shell {
-  position: relative;
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
   overflow: hidden;
+  position: relative;
   margin: 0;
   padding: 0;
   background: var(--background-secondary);
@@ -14,6 +16,14 @@
 
   /* Control the size of each grid square */
   background-size: 40px 40px;
+}
+
+.app-workspace {
+  position: relative;
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  width: 100%;
 }
 
 .zen-canvas {

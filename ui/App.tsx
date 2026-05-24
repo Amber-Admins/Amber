@@ -20,6 +20,8 @@ import {
   setSetting,
 } from "./services/settings";
 import NodeEditorExpanded from "./components/NodeEditorExpanded";
+import styles from "./style/components/MemoryBadge.module.css";
+import { countPendingChangesetItems } from "./services/memoryAgent";
 import "./style/MonoStyles.css";
 
 function App() {
@@ -27,6 +29,34 @@ function App() {
   const [needsOnboarding, setNeedsOnboarding] = useState<boolean>(false);
   const [onboardingBusy, setOnboardingBusy] = useState<boolean>(false);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [pendingProposalCount, setPendingProposalCount] = useState<number>(0);
+
+  useEffect(() => {
+    let active = true;
+    const poll = () => {
+      void countPendingChangesetItems()
+        .then((count) => {
+          if (active) {
+            setPendingProposalCount(count);
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to fetch pending changeset items count:", error);
+        });
+    };
+
+    if (onboardingResolved && !needsOnboarding) {
+      poll();
+      const intervalId = setInterval(poll, 30_000);
+      return () => {
+        active = false;
+        clearInterval(intervalId);
+      };
+    }
+    return () => {
+      active = false;
+    };
+  }, [onboardingResolved, needsOnboarding]);
 
   useEffect(() => {
     void refreshAllPriorityScores().catch(() => {});
@@ -364,227 +394,247 @@ function App() {
         ) : null}
         {onboardingResolved && needsOnboarding ? null : (
           <>
-            <section className="zen-canvas" onClick={onZenCanvasClick} style={zenCanvasStyle}>
-              {/* Floating segment view toggle */}
-              {viewMode !== "editor" && (
-                <div className="canvas-view-toggle-pill" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    className={`canvas-view-toggle-btn ${viewMode === "chat" ? "active" : ""}`}
-                    onClick={() => handleSetViewMode("chat")}
-                  >
-                    💬 Recall / Chat
-                  </button>
-                  <button
-                    className={`canvas-view-toggle-btn ${viewMode === "spatial" ? "active" : ""}`}
-                    onClick={() => handleSetViewMode("spatial")}
-                  >
-                    🕸️ Spatial Workspace
-                  </button>
-                </div>
+            <div className={styles.appTopBar}>
+              <span className={styles.appTopBarTitle}>Memory Agent</span>
+              {pendingProposalCount > 0 && (
+                <button
+                  type="button"
+                  className={styles.pendingBadge}
+                  title="Pending memory proposals"
+                >
+                  {pendingProposalCount} pending
+                </button>
               )}
-              {viewMode === "editor" ? (
-                selectedNodeId && (
-                  <NodeEditorExpanded
-                    nodeId={selectedNodeId}
-                    onClose={() => handleSetViewMode(previousViewMode)}
-                    onSelectNode={onSelectNode}
-                    isRedactedUnlocked={isRedactedUnlocked}
-                    setIsRedactedUnlocked={setIsRedactedUnlocked}
-                  />
-                )
-              ) : viewMode === "spatial" ? (
-                <SpatialWorkspace
-                  selectedVaultId={selectedVaultId}
-                  selectedNodeId={selectedNodeId}
-                  onSelectVault={onSelectVault}
-                  onFocusVault={onFocusVault}
-                  onSelectNode={onSelectNode}
-                  refreshKey={vaultRefreshKey + nodeRefreshKey}
-                  onVaultCreated={onVaultCreated}
-                  onVaultDeleted={onVaultDeleted}
-                  onVaultUpdated={onVaultUpdated}
-                  onNodeCreated={onNodeCreated}
-                  onNodeDeleted={onNodeDeleted}
-                  onNodeUpdated={onNodeUpdated}
-                  isRedactedUnlocked={isRedactedUnlocked}
-                  setIsRedactedUnlocked={setIsRedactedUnlocked}
-                  onSelectedVaultRequiresUnlockChange={setSelectedVaultRequiresUnlock}
-                  onModalToggle={setSpatialModalOpen}
-                  isLeftPanePinned={leftPanePinned}
-                  onLeftPanePinChange={setLeftPanePinned}
-                />
-              ) : (
-                <ChatPanel
-                  selectedNodeIds={scopeNodeIds}
-                  scope={assemblerScope}
-                  selectedVaultId={selectedVaultId}
-                  onSelectVault={onSelectVault}
-                  onOpenSettings={onOpenSettings}
-                  onModalToggle={setChatModalOpen}
-                  onSelectNode={onSelectNode}
-                />
-              )}
-            </section>
+            </div>
 
-            {viewMode !== "editor" && (
-              <div
-                className={`pane-wrap left ${leftPaneExpanded || sidebarModalOpen ? "show" : ""}`}
-                style={{ width: `${leftPaneWidth}px` }}
-              >
-                {!selectedVaultId ? (
-                  <VaultSidebar
-                    selectedVaultId={selectedVaultId}
-                    onSelectVault={onSelectVault}
-                    onSelectNode={onSelectNode}
-                    onVaultCreated={onVaultCreated}
-                    onVaultDeleted={onVaultDeleted}
-                    onOpenDashboard={onOpenDashboard}
-                    onOpenSettings={onOpenSettings}
-                    refreshKey={vaultRefreshKey}
-                    isRedactedUnlocked={isRedactedUnlocked}
-                    setIsRedactedUnlocked={setIsRedactedUnlocked}
-                    onModalToggle={setSidebarModalOpen}
-                  />
-                ) : (
-                  <NodeList
-                    selectedVaultId={selectedVaultId}
-                    selectedNodeId={selectedNodeId}
-                    onSelectNode={onSelectNode}
-                    onSelectVault={onSelectVault}
-                    onNodeCreated={onNodeCreated}
-                    onVaultCreated={onVaultCreated}
-                    onBack={() => {
-                      setSelectedVaultId(null);
-                      setSelectedNodeId(null);
-                    }}
-                    refreshKey={nodeRefreshKey}
-                    isRedactedUnlocked={isRedactedUnlocked}
-                    onModalToggle={setSidebarModalOpen}
-                  />
-                )}
-                {/* Left Resize Handle */}
-                <div
-                  className={`resize-handle left-handle ${leftResizing ? "active" : ""}`}
-                  onMouseDown={handleLeftResizeMouseDown}
-                />
-              </div>
-            )}
-
-            {viewMode !== "editor" && (
-              <div
-                className={`pane-wrap right ${rightPaneExpanded ? "show" : ""}`}
-                style={{ width: `${rightPaneWidth}px` }}
-              >
-                {showDashboard ? (
-                  <PriorityDashboard
-                    refreshKey={nodeRefreshKey}
-                    isRedactedUnlocked={isRedactedUnlocked}
-                  />
-                ) : showSettings ? (
-                  <LlmSettings />
-                ) : (
-                  <div className="right-pane-stack">
-                    <ScopeIndicator
-                      selectedNodeIds={scopeNodeIds}
-                      scope={assemblerScope}
-                      onScopeChange={setAssemblerScope}
-                    />
-                    <ActiveMemoryPanel
-                      selectedNodeIds={scopeNodeIds}
-                      isRedactedUnlocked={isRedactedUnlocked}
-                    />
-                    <NodeEditor
-                      selectedNodeId={selectedNodeId}
-                      onNodeDeleted={onNodeDeleted}
-                      onSaveSuccess={() => setNodeRefreshKey((value) => value + 1)}
-                      refreshKey={nodeRefreshKey}
-                      isRedactedUnlocked={isRedactedUnlocked}
-                      setIsRedactedUnlocked={setIsRedactedUnlocked}
-                      onModalToggle={setEditorModalOpen}
-                      onSelectNode={onSelectNode}
-                      onExpand={() => handleSetViewMode("editor")}
-                    />
+            <div className="app-workspace">
+              <section className="zen-canvas" onClick={onZenCanvasClick} style={zenCanvasStyle}>
+                {/* Floating segment view toggle */}
+                {viewMode !== "editor" && (
+                  <div className="canvas-view-toggle-pill" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      className={`canvas-view-toggle-btn ${viewMode === "chat" ? "active" : ""}`}
+                      onClick={() => handleSetViewMode("chat")}
+                    >
+                      💬 Recall / Chat
+                    </button>
+                    <button
+                      className={`canvas-view-toggle-btn ${viewMode === "spatial" ? "active" : ""}`}
+                      onClick={() => handleSetViewMode("spatial")}
+                    >
+                      🕸️ Spatial Workspace
+                    </button>
                   </div>
                 )}
-                {/* Right Resize Handle */}
+                {viewMode === "editor" ? (
+                  selectedNodeId && (
+                    <NodeEditorExpanded
+                      nodeId={selectedNodeId}
+                      onClose={() => handleSetViewMode(previousViewMode)}
+                      onSelectNode={onSelectNode}
+                      isRedactedUnlocked={isRedactedUnlocked}
+                      setIsRedactedUnlocked={setIsRedactedUnlocked}
+                    />
+                  )
+                ) : viewMode === "spatial" ? (
+                  <SpatialWorkspace
+                    selectedVaultId={selectedVaultId}
+                    selectedNodeId={selectedNodeId}
+                    onSelectVault={onSelectVault}
+                    onFocusVault={onFocusVault}
+                    onSelectNode={onSelectNode}
+                    refreshKey={vaultRefreshKey + nodeRefreshKey}
+                    onVaultCreated={onVaultCreated}
+                    onVaultDeleted={onVaultDeleted}
+                    onVaultUpdated={onVaultUpdated}
+                    onNodeCreated={onNodeCreated}
+                    onNodeDeleted={onNodeDeleted}
+                    onNodeUpdated={onNodeUpdated}
+                    isRedactedUnlocked={isRedactedUnlocked}
+                    setIsRedactedUnlocked={setIsRedactedUnlocked}
+                    onSelectedVaultRequiresUnlockChange={setSelectedVaultRequiresUnlock}
+                    onModalToggle={setSpatialModalOpen}
+                    isLeftPanePinned={leftPanePinned}
+                    onLeftPanePinChange={setLeftPanePinned}
+                  />
+                ) : (
+                  <ChatPanel
+                    selectedNodeIds={scopeNodeIds}
+                    scope={assemblerScope}
+                    selectedVaultId={selectedVaultId}
+                    onSelectVault={onSelectVault}
+                    onOpenSettings={onOpenSettings}
+                    onModalToggle={setChatModalOpen}
+                    onSelectNode={onSelectNode}
+                    onRefreshPendingCount={() => {
+                      void countPendingChangesetItems()
+                        .then(setPendingProposalCount)
+                        .catch(console.error);
+                    }}
+                  />
+                )}
+              </section>
+
+              {viewMode !== "editor" && (
                 <div
-                  className={`resize-handle right-handle ${rightResizing ? "active" : ""}`}
-                  onMouseDown={handleRightResizeMouseDown}
-                />
-              </div>
-            )}
+                  className={`pane-wrap left ${leftPaneExpanded || sidebarModalOpen ? "show" : ""}`}
+                  style={{ width: `${leftPaneWidth}px` }}
+                >
+                  {!selectedVaultId ? (
+                    <VaultSidebar
+                      selectedVaultId={selectedVaultId}
+                      onSelectVault={onSelectVault}
+                      onSelectNode={onSelectNode}
+                      onVaultCreated={onVaultCreated}
+                      onVaultDeleted={onVaultDeleted}
+                      onOpenDashboard={onOpenDashboard}
+                      onOpenSettings={onOpenSettings}
+                      refreshKey={vaultRefreshKey}
+                      isRedactedUnlocked={isRedactedUnlocked}
+                      setIsRedactedUnlocked={setIsRedactedUnlocked}
+                      onModalToggle={setSidebarModalOpen}
+                    />
+                  ) : (
+                    <NodeList
+                      selectedVaultId={selectedVaultId}
+                      selectedNodeId={selectedNodeId}
+                      onSelectNode={onSelectNode}
+                      onSelectVault={onSelectVault}
+                      onNodeCreated={onNodeCreated}
+                      onVaultCreated={onVaultCreated}
+                      onBack={() => {
+                        setSelectedVaultId(null);
+                        setSelectedNodeId(null);
+                      }}
+                      refreshKey={nodeRefreshKey}
+                      isRedactedUnlocked={isRedactedUnlocked}
+                      onModalToggle={setSidebarModalOpen}
+                    />
+                  )}
+                  {/* Left Resize Handle */}
+                  <div
+                    className={`resize-handle left-handle ${leftResizing ? "active" : ""}`}
+                    onMouseDown={handleLeftResizeMouseDown}
+                  />
+                </div>
+              )}
 
-            {/* Left Sidebar Toggle Button */}
-            {viewMode !== "editor" && (
-              <button
-                className={`sidebar-toggle-btn left ${leftPaneExpanded || sidebarModalOpen ? "open" : ""}`}
-                onClick={() => {
-                  if (selectedVaultRequiresUnlock) {
-                    return;
+              {viewMode !== "editor" && (
+                <div
+                  className={`pane-wrap right ${rightPaneExpanded ? "show" : ""}`}
+                  style={{ width: `${rightPaneWidth}px` }}
+                >
+                  {showDashboard ? (
+                    <PriorityDashboard
+                      refreshKey={nodeRefreshKey}
+                      isRedactedUnlocked={isRedactedUnlocked}
+                    />
+                  ) : showSettings ? (
+                    <LlmSettings />
+                  ) : (
+                    <div className="right-pane-stack">
+                      <ScopeIndicator
+                        selectedNodeIds={scopeNodeIds}
+                        scope={assemblerScope}
+                        onScopeChange={setAssemblerScope}
+                      />
+                      <ActiveMemoryPanel
+                        selectedNodeIds={scopeNodeIds}
+                        isRedactedUnlocked={isRedactedUnlocked}
+                      />
+                      <NodeEditor
+                        selectedNodeId={selectedNodeId}
+                        onNodeDeleted={onNodeDeleted}
+                        onSaveSuccess={() => setNodeRefreshKey((value) => value + 1)}
+                        refreshKey={nodeRefreshKey}
+                        isRedactedUnlocked={isRedactedUnlocked}
+                        setIsRedactedUnlocked={setIsRedactedUnlocked}
+                        onModalToggle={setEditorModalOpen}
+                        onSelectNode={onSelectNode}
+                        onExpand={() => handleSetViewMode("editor")}
+                      />
+                    </div>
+                  )}
+                  {/* Right Resize Handle */}
+                  <div
+                    className={`resize-handle right-handle ${rightResizing ? "active" : ""}`}
+                    onMouseDown={handleRightResizeMouseDown}
+                  />
+                </div>
+              )}
+
+              {/* Left Sidebar Toggle Button */}
+              {viewMode !== "editor" && (
+                <button
+                  className={`sidebar-toggle-btn left ${leftPaneExpanded || sidebarModalOpen ? "open" : ""}`}
+                  onClick={() => {
+                    if (selectedVaultRequiresUnlock) {
+                      return;
+                    }
+                    setLeftPanePinned(!leftPanePinned);
+                  }}
+                  style={leftToggleStyle}
+                  title={
+                    selectedVaultRequiresUnlock
+                      ? "Unlock redacted vault first"
+                      : leftPanePinned
+                        ? "Collapse Left Panel"
+                        : "Pin Left Panel"
                   }
-                  setLeftPanePinned(!leftPanePinned);
-                }}
-                style={leftToggleStyle}
-                title={
-                  selectedVaultRequiresUnlock
-                    ? "Unlock redacted vault first"
-                    : leftPanePinned
-                      ? "Collapse Left Panel"
-                      : "Pin Left Panel"
-                }
-                aria-label="Toggle left panel"
-                disabled={selectedVaultRequiresUnlock}
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+                  aria-label="Toggle left panel"
+                  disabled={selectedVaultRequiresUnlock}
                 >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M9 3v18" />
-                  {leftPaneExpanded ? (
-                    <polygon points="16,9 12,12 16,15" fill="currentColor" />
-                  ) : (
-                    <polygon points="12,9 16,12 12,15" fill="currentColor" />
-                  )}
-                </svg>
-              </button>
-            )}
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M9 3v18" />
+                    {leftPaneExpanded ? (
+                      <polygon points="16,9 12,12 16,15" fill="currentColor" />
+                    ) : (
+                      <polygon points="12,9 16,12 12,15" fill="currentColor" />
+                    )}
+                  </svg>
+                </button>
+              )}
 
-            {/* Right Sidebar Toggle Button */}
-            {viewMode !== "editor" && (
-              <button
-                className={`sidebar-toggle-btn right ${rightPaneExpanded ? "open" : ""}`}
-                onClick={() => setRightPanePinned(!rightPanePinned)}
-                style={rightToggleStyle}
-                title={rightPanePinned ? "Collapse Right Panel" : "Pin Right Panel"}
-                aria-label="Toggle right panel"
-              >
-                <svg
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {/* Right Sidebar Toggle Button */}
+              {viewMode !== "editor" && (
+                <button
+                  className={`sidebar-toggle-btn right ${rightPaneExpanded ? "open" : ""}`}
+                  onClick={() => setRightPanePinned(!rightPanePinned)}
+                  style={rightToggleStyle}
+                  title={rightPanePinned ? "Collapse Right Panel" : "Pin Right Panel"}
+                  aria-label="Toggle right panel"
                 >
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                  <path d="M15 3v18" />
-                  {rightPaneExpanded ? (
-                    <polygon points="8,9 12,12 8,15" fill="currentColor" />
-                  ) : (
-                    <polygon points="12,9 8,12 12,15" fill="currentColor" />
-                  )}
-                </svg>
-              </button>
-            )}
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="3" y="3" width="18" height="18" rx="2" />
+                    <path d="M15 3v18" />
+                    {rightPaneExpanded ? (
+                      <polygon points="8,9 12,12 8,15" fill="currentColor" />
+                    ) : (
+                      <polygon points="12,9 8,12 12,15" fill="currentColor" />
+                    )}
+                  </svg>
+                </button>
+              )}
+            </div>
           </>
         )}
       </main>
