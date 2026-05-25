@@ -203,9 +203,8 @@ function App() {
   };
 
   function closeAllPanes() {
-    if (!leftPanePinned) {
-      setLeftPanePinned(false);
-    }
+    // The left pane is meant to be persistently pinned in spatial view,
+    // so clicking the canvas layout does not clear leftPanePinned.
     setRightPanePinned(false);
   }
 
