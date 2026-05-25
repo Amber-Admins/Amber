@@ -59,6 +59,7 @@ fn trim_tail_with_attention_sink(text: &str, max_tokens: usize) -> String {
 pub struct AssemblerConfig {
     pub scope: String,
     pub max_tokens: usize,
+    pub is_unlocked: bool,
 }
 
 struct AssemblerNode {
@@ -199,13 +200,25 @@ pub fn build_context(
             }
             "local" => {
                 match effective_tier {
-                    "open" | "local_only" | "locked" => {
+                    "open" | "local_only" => {
                         format!(
                             "<document title=\"{}\">\n{}\n\n{}\n</document>",
                             escape_xml_attr(&node.title),
                             escape_xml_attr(&node.summary),
                             escape_xml_attr(&node.detail)
                         )
+                    }
+                    "locked" => {
+                        if config.is_unlocked {
+                            format!(
+                                "<document title=\"{}\">\n{}\n\n{}\n</document>",
+                                escape_xml_attr(&node.title),
+                                node.summary,
+                                node.detail
+                            )
+                        } else {
+                            generate_pointer_stub(&node.title, &node.id)
+                        }
                     }
                     _ => {
                         // redacted is completely omitted from local scope
@@ -391,13 +404,14 @@ mod tests {
             "node_nested_redacted".to_string(),
         ];
 
-        // 1. Local scope: local_only, locked should be fully included; redacted should be omitted.
+        // 1. Local scope (locked): local_only included; locked, redacted are stubbed.
         let local_result = match build_context(
             &conn,
             node_ids.clone(),
             AssemblerConfig {
                 scope: "local".to_string(),
                 max_tokens: 4000,
+                is_unlocked: false,
             },
         ) {
             Ok(value) => value,
@@ -407,13 +421,28 @@ mod tests {
         // local_only is included
         assert!(local_result.contains("<document title=\"Local Only Node\">"));
         assert!(local_result.contains("local detail"));
-        // locked is included
-        assert!(local_result.contains("<document title=\"Locked Node\">"));
-        assert!(local_result.contains("locked detail"));
-        // redacted is omitted
+        // locked is stubbed since we aren't unlocked
+        assert!(local_result.contains("[LOCKED NODE STUB] Title: Locked Node"));
+        // redacted is fully omitted, even for local models
         assert!(!local_result.contains("Redacted Node"));
-        // nested redacted inheritance is omitted
         assert!(!local_result.contains("Nested Redacted Node"));
+
+        // 1.5 Local scope (unlocked): locked is fully included.
+        let local_unlocked_result = match build_context(
+            &conn,
+            node_ids.clone(),
+            AssemblerConfig {
+                scope: "local".to_string(),
+                max_tokens: 4000,
+                is_unlocked: true,
+            },
+        ) {
+            Ok(value) => value,
+            Err(err) => panic!("local scope assembler failed: {err}"),
+        };
+        assert!(local_unlocked_result.contains("<document title=\"Locked Node\">"));
+        assert!(local_unlocked_result.contains("locked detail"));
+        assert!(!local_unlocked_result.contains("Redacted Node"));
 
         // 2. Cloud scope: locked is stubbed; local_only and redacted are completely omitted.
         let cloud_result = match build_context(
@@ -422,6 +451,7 @@ mod tests {
             AssemblerConfig {
                 scope: "cloud".to_string(),
                 max_tokens: 4000,
+                is_unlocked: false,
             },
         ) {
             Ok(value) => value,
@@ -455,6 +485,7 @@ mod tests {
             AssemblerConfig {
                 scope: "local".to_string(),
                 max_tokens: 4000,
+                is_unlocked: false,
             },
         ) {
             Ok(value) => value,
@@ -467,6 +498,7 @@ mod tests {
             AssemblerConfig {
                 scope: "local".to_string(),
                 max_tokens: 120,
+                is_unlocked: false,
             },
         ) {
             Ok(value) => value,

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import NodeEditor from "./components/NodeEditor";
 import NodeList from "./components/NodeList";
@@ -117,6 +117,7 @@ function App() {
     }
     return 280;
   });
+  const leftResizeWidthRef = useRef(leftPaneWidth);
   const [rightPaneWidth, setRightPaneWidth] = useState<number>(() => {
     const saved = localStorage.getItem("sidebar_right_width");
     if (saved) {
@@ -127,6 +128,7 @@ function App() {
     }
     return 400;
   });
+  const rightResizeWidthRef = useRef(rightPaneWidth);
 
   // Load persistent panel widths from the database on mount
   useEffect(() => {
@@ -202,50 +204,123 @@ function App() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  const handleLeftResizeMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setLeftResizing(true);
-    let finalWidth = leftPaneWidth;
-    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const maxWidth = window.innerWidth * 0.4;
-      finalWidth = Math.max(200, Math.min(maxWidth, moveEvent.clientX));
-      setLeftPaneWidth(finalWidth);
-    };
-    const handleMouseUp = () => {
-      setLeftResizing(false);
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+  useEffect(() => {
+    if (!leftResizing) {
+      return;
+    }
+
+    let finished = false;
+
+    const persistLeftWidth = () => {
+      const finalWidth = leftResizeWidthRef.current;
       localStorage.setItem("sidebar_left_width", String(finalWidth));
       void setSetting("sidebar_left_width", String(finalWidth)).catch(() => {});
     };
+
+    const finishResize = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      setLeftResizing(false);
+      persistLeftWidth();
+    };
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const maxWidth = window.innerWidth * 0.4;
+      const width = Math.max(200, Math.min(maxWidth, moveEvent.clientX));
+      leftResizeWidthRef.current = width;
+      setLeftPaneWidth(width);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        finishResize();
+      }
+    };
+
     document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    document.addEventListener("mouseup", finishResize);
+    window.addEventListener("blur", finishResize);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", finishResize);
+      window.removeEventListener("blur", finishResize);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (!finished) {
+        persistLeftWidth();
+      }
+    };
+  }, [leftResizing]);
+
+  useEffect(() => {
+    if (!rightResizing) {
+      return;
+    }
+
+    let finished = false;
+
+    const persistRightWidth = () => {
+      const finalWidth = rightResizeWidthRef.current;
+      localStorage.setItem("sidebar_right_width", String(finalWidth));
+      void setSetting("sidebar_right_width", String(finalWidth)).catch(() => {});
+    };
+
+    const finishResize = () => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      setRightResizing(false);
+      persistRightWidth();
+    };
+
+    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
+      const maxWidth = window.innerWidth * 0.4;
+      const width = Math.max(200, Math.min(maxWidth, window.innerWidth - moveEvent.clientX));
+      rightResizeWidthRef.current = width;
+      setRightPaneWidth(width);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        finishResize();
+      }
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", finishResize);
+    window.addEventListener("blur", finishResize);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", finishResize);
+      window.removeEventListener("blur", finishResize);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (!finished) {
+        persistRightWidth();
+      }
+    };
+  }, [rightResizing]);
+
+  const handleLeftResizeMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    leftResizeWidthRef.current = leftPaneWidth;
+    setLeftResizing(true);
   };
 
   const handleRightResizeMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
+    rightResizeWidthRef.current = rightPaneWidth;
     setRightResizing(true);
-    let finalWidth = rightPaneWidth;
-    const handleMouseMove = (moveEvent: globalThis.MouseEvent) => {
-      const maxWidth = window.innerWidth * 0.4;
-      finalWidth = Math.max(200, Math.min(maxWidth, window.innerWidth - moveEvent.clientX));
-      setRightPaneWidth(finalWidth);
-    };
-    const handleMouseUp = () => {
-      setRightResizing(false);
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
-      localStorage.setItem("sidebar_right_width", String(finalWidth));
-      void setSetting("sidebar_right_width", String(finalWidth)).catch(() => {});
-    };
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
   };
 
   function closeAllPanes() {
-    if (!leftPanePinned) {
-      setLeftPanePinned(false);
-    }
+    // The left pane is meant to be persistently pinned in spatial view,
+    // so clicking the canvas layout does not clear leftPanePinned.
     setRightPanePinned(false);
   }
 
@@ -405,6 +480,83 @@ function App() {
                   {pendingProposalCount} pending
                 </button>
               )}
+              <button
+                className={`canvas-view-toggle-btn ${viewMode === "spatial" ? "active" : ""}`}
+                onClick={() => setViewMode("spatial")}
+              >
+                🕸️ Spatial Workspace
+              </button>
+            </div>
+
+            {viewMode === "spatial" ? (
+              <SpatialWorkspace
+                selectedVaultId={selectedVaultId}
+                selectedNodeId={selectedNodeId}
+                onSelectVault={onSelectVault}
+                onFocusVault={onFocusVault}
+                onSelectNode={onSelectNode}
+                refreshKey={vaultRefreshKey + nodeRefreshKey}
+                onVaultCreated={onVaultCreated}
+                onVaultDeleted={onVaultDeleted}
+                onVaultUpdated={onVaultUpdated}
+                onNodeCreated={onNodeCreated}
+                onNodeDeleted={onNodeDeleted}
+                onNodeUpdated={onNodeUpdated}
+                isRedactedUnlocked={isRedactedUnlocked}
+                setIsRedactedUnlocked={setIsRedactedUnlocked}
+                onSelectedVaultRequiresUnlockChange={setSelectedVaultRequiresUnlock}
+                onModalToggle={setSpatialModalOpen}
+                isLeftPanePinned={leftPanePinned}
+                onLeftPanePinChange={setLeftPanePinned}
+              />
+            ) : (
+              <ChatPanel
+                selectedNodeIds={scopeNodeIds}
+                scope={assemblerScope}
+                selectedVaultId={selectedVaultId}
+                onSelectVault={onSelectVault}
+                onOpenSettings={onOpenSettings}
+                isRedactedUnlocked={isRedactedUnlocked}
+              />
+            )}
+
+            <div
+              className={`pane-wrap left ${leftPaneExpanded || sidebarModalOpen ? "show" : ""}`}
+              style={{ width: `${leftPaneWidth}px` }}
+            >
+              {!selectedVaultId ? (
+                <VaultSidebar
+                  selectedVaultId={selectedVaultId}
+                  onSelectVault={onSelectVault}
+                  onSelectNode={onSelectNode}
+                  onVaultCreated={onVaultCreated}
+                  onVaultDeleted={onVaultDeleted}
+                  onOpenDashboard={onOpenDashboard}
+                  onOpenSettings={onOpenSettings}
+                  refreshKey={vaultRefreshKey}
+                  isRedactedUnlocked={isRedactedUnlocked}
+                  setIsRedactedUnlocked={setIsRedactedUnlocked}
+                  onModalToggle={setSidebarModalOpen}
+                />
+              ) : (
+                <NodeList
+                  selectedVaultId={selectedVaultId}
+                  selectedNodeId={selectedNodeId}
+                  onSelectNode={onSelectNode}
+                  onSelectVault={onSelectVault}
+                  onNodeCreated={onNodeCreated}
+                  onVaultCreated={onVaultCreated}
+                  onBack={() => onSelectVault(null)}
+                  refreshKey={nodeRefreshKey}
+                  isRedactedUnlocked={isRedactedUnlocked}
+                  onModalToggle={setSidebarModalOpen}
+                />
+              )}
+              {/* Left Resize Handle */}
+              <div
+                className={`resize-handle left-handle ${leftResizing ? "active" : ""}`}
+                onMouseDown={handleLeftResizeMouseDown}
+              />
             </div>
 
             <div className="app-workspace">
@@ -464,6 +616,7 @@ function App() {
                     selectedVaultId={selectedVaultId}
                     onSelectVault={onSelectVault}
                     onOpenSettings={onOpenSettings}
+                    isRedactedUnlocked={isRedactedUnlocked}
                     onModalToggle={setChatModalOpen}
                     onSelectNode={onSelectNode}
                     onRefreshPendingCount={() => {

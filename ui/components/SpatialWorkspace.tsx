@@ -384,12 +384,8 @@ export default function SpatialWorkspace({
 
   const handleWheel = (e: React.WheelEvent) => {
     const zoomFactor = 1.08;
-    let newZoom = zoom;
-    if (e.deltaY < 0) {
-      newZoom = Math.min(zoom * zoomFactor, 2.5);
-    } else {
-      newZoom = Math.max(zoom / zoomFactor, 0.25);
-    }
+    const newZoom =
+      e.deltaY < 0 ? Math.min(zoom * zoomFactor, 2.5) : Math.max(zoom / zoomFactor, 0.25);
     setZoom(newZoom);
   };
 

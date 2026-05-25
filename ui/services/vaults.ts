@@ -77,25 +77,21 @@ export async function getVault(vaultId: string): Promise<Vault | null> {
 
 const positionDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-export function updateVaultPosition(vaultId: string, x: number, y: number): Promise<boolean> {
+export function updateVaultPosition(vaultId: string, x: number, y: number): void {
   const existing = positionDebounceTimers.get(vaultId);
   if (existing) {
     clearTimeout(existing);
   }
 
-  return new Promise((resolve) => {
-    const timer = setTimeout(async () => {
-      positionDebounceTimers.delete(vaultId);
-      try {
-        const res = await unwrapIpcResult(vaultUpdatePosition(vaultId, x, y));
-        resolve(res);
-      } catch (err) {
-        console.error("Failed to update vault position:", err);
-        resolve(false);
-      }
-    }, 300);
-    positionDebounceTimers.set(vaultId, timer);
-  });
+  const timer = setTimeout(async () => {
+    positionDebounceTimers.delete(vaultId);
+    try {
+      await unwrapIpcResult(vaultUpdatePosition(vaultId, x, y));
+    } catch (err) {
+      console.error("Failed to update vault position:", err);
+    }
+  }, 300);
+  positionDebounceTimers.set(vaultId, timer);
 }
 
 export async function updateVaultColorTheme(vaultId: string, colorTheme: string): Promise<boolean> {

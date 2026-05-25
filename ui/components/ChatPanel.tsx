@@ -308,6 +308,7 @@ type ChatPanelProps = {
   onModalToggle?: (isOpen: boolean) => void;
   onSelectNode?: (nodeId: string) => void;
   onRefreshPendingCount?: () => void;
+  isRedactedUnlocked: boolean;
 };
 
 function ChatPanel({
@@ -319,6 +320,7 @@ function ChatPanel({
   onModalToggle,
   onSelectNode,
   onRefreshPendingCount,
+  isRedactedUnlocked,
 }: ChatPanelProps) {
   const MAX_RENDERED_MESSAGES = 60;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -528,7 +530,7 @@ function ChatPanel({
       } else if (provider === "ollama") {
         endpoint = getOllamaEndpoint();
       } else if (["openai", "anthropic", "google", "xai"].includes(provider)) {
-        endpoint = getApiKey(provider);
+        endpoint = await getApiKey(provider);
       }
       const model = getLlmModel();
 
@@ -546,7 +548,8 @@ function ChatPanel({
         endpoint,
         model,
         executionPrompt,
-        chartsEnabled
+        chartsEnabled,
+        isRedactedUnlocked
       );
 
       const aiMsgId = crypto.randomUUID();

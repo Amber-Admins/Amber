@@ -83,6 +83,13 @@ pub fn auth_secret_is_setup(state: tauri::State<'_, DbState>) -> IpcResponse<boo
 pub fn auth_secret_set(passphrase: String, state: tauri::State<'_, DbState>) -> IpcResponse<bool> {
     into_ipc((|| {
         let conn = open_connection(&state.db_path)?;
+
+        if fetch_master_hash(&conn)?.is_some() {
+            return Err(
+                "Master password is already set. Cannot reset without migrating data.".to_string(),
+            );
+        }
+
         let phc_hash = hash_password(&passphrase).map_err(|err| err.to_string())?;
         let stored_value = serde_json::to_string(&phc_hash)
             .map_err(|err| format!("Failed serializing master secret hash: {err}"))?;

@@ -176,9 +176,31 @@ function CloudSettings({
   const providerDef = CLOUD_PROVIDERS.find((p) => p.id === provider) || CLOUD_PROVIDERS[0];
   const defaultModel = providerDef.presets[0] || "";
 
-  const [apiKey, setApiKeyState] = useState(() => getApiKey(provider));
-  const [selectedModel, setSelectedModel] = useState(() => getLlmModel(provider) || defaultModel);
+  const [apiKey, setApiKeyState] = useState("");
   const [status, setStatus] = useState("");
+  useEffect(() => {
+    let canceled = false;
+    void (async () => {
+      try {
+        const key = await getApiKey(provider);
+        if (!canceled) {
+          setApiKeyState(key);
+          setStatus("");
+        }
+      } catch (err) {
+        if (!canceled) {
+          setApiKeyState("");
+          const message = err instanceof Error ? err.message : String(err);
+          setStatus(`Failed to load API key: ${message}`);
+        }
+      }
+    })();
+    return () => {
+      canceled = true;
+    };
+  }, [provider]);
+
+  const [selectedModel, setSelectedModel] = useState(() => getLlmModel(provider) || defaultModel);
 
   useEffect(() => {
     if (!getLlmModel(provider)) {
@@ -186,10 +208,16 @@ function CloudSettings({
     }
   }, [provider, defaultModel]);
 
-  function handleSave() {
-    setApiKey(provider, apiKey);
-    setLlmModel(provider, selectedModel);
-    setStatus("Saved cloud configuration.");
+  async function handleSave() {
+    setStatus("");
+    try {
+      await setApiKey(provider, apiKey);
+      setLlmModel(provider, selectedModel);
+      setStatus("Saved cloud configuration.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setStatus(`Failed to save cloud configuration: ${message}`);
+    }
   }
 
   return (
@@ -223,6 +251,8 @@ function CloudSettings({
             type="button"
             className="eye-toggle"
             onClick={() => setApiKeyVisible(!apiKeyVisible)}
+            aria-label={apiKeyVisible ? "Hide API key" : "Show API key"}
+            aria-pressed={apiKeyVisible}
           >
             <EyeIcon visible={apiKeyVisible} />
           </button>
@@ -358,7 +388,7 @@ function LlmSettings() {
       let endp = "";
       if (p === "ollama") endp = getOllamaEndpoint();
       else if (p === "lmstudio") endp = getLmStudioEndpoint();
-      else endp = getApiKey(p);
+      else endp = await getApiKey(p);
       const m = getLlmModel(p);
 
       const proposals = await unwrapIpcResult(

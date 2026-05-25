@@ -5,5 +5,5 @@
  */
 export function sanitizeSvgText(text: string): string {
   if (!text) return "";
-  return text.replace(/[^a-zA-Z0-9\-\s]/g, "");
+  return text.replace(/[^a-zA-Z0-9\- ]/g, "");
 }

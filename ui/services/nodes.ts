@@ -67,10 +67,20 @@ export async function chatWithScope(
   endpoint: string,
   model: string,
   userPrompt: string,
-  chartsEnabled: boolean
+  chartsEnabled: boolean,
+  isRedactedUnlocked: boolean
 ): Promise<string> {
   return unwrapIpcResult(
-    chatWithLlm(nodeIds, scope, provider, endpoint, model, userPrompt, chartsEnabled)
+    chatWithLlm(
+      nodeIds,
+      scope,
+      provider,
+      endpoint,
+      model,
+      userPrompt,
+      chartsEnabled,
+      isRedactedUnlocked
+    )
   );
 }
 
