@@ -8,17 +8,10 @@ import {
   type Backlink,
   type Door,
   type DoorCreateInput,
-} from "../ipc";
-import { AppError } from "./ipcResult";
+} from "../ipc.ts";
+import { AppError, toAppError } from "./ipcResult.ts";
 
 export type ServiceResult<T> = { data: T; error: null } | { data: null; error: AppError };
-
-function toAppError(error: unknown): AppError {
-  if (error instanceof AppError) {
-    return error;
-  }
-  return new AppError(String(error));
-}
 
 export async function createDoor(input: DoorCreateInput): Promise<ServiceResult<Door>> {
   const result = await doorCreate(input);

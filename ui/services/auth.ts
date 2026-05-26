@@ -1,14 +1,7 @@
 import { authIsSetup, authSetPassword, authVerifyPassword } from "../ipc";
-import { AppError } from "./ipcResult";
+import { AppError, toAppError } from "./ipcResult.ts";
 
 export type ServiceResult<T> = { data: T; error: null } | { data: null; error: AppError };
-
-function toAppError(error: unknown): AppError {
-  if (error instanceof AppError) {
-    return error;
-  }
-  return new AppError(String(error));
-}
 
 export async function isAuthSetup(): Promise<ServiceResult<boolean>> {
   const result = await authIsSetup();
