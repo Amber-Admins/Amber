@@ -43,10 +43,24 @@ export type {
   VaultUpdateInput,
 };
 
+let mockInvoker: ((command: string, payload?: Record<string, unknown>) => Promise<unknown>) | null =
+  null;
+
+export function setMockInvoker(invoker: typeof mockInvoker) {
+  mockInvoker = invoker;
+}
+
 async function invokeTyped<T>(
   command: string,
   payload?: Record<string, unknown>
 ): Promise<IpcResult<T>> {
+  if (mockInvoker) {
+    try {
+      return (await mockInvoker(command, payload)) as IpcResult<T>;
+    } catch (error) {
+      return { err: String(error) };
+    }
+  }
   try {
     return await invoke<IpcResult<T>>(command, payload);
   } catch (error) {

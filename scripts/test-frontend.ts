@@ -1,7 +1,8 @@
 import { runPrivacyTests } from "../ui/utils/privacy.ts";
 import { AppError, toAppError, unwrapIpcResult } from "../ui/services/ipcResult.ts";
-import { resolveVaultPath } from "../ui/services/vaults.ts";
+import { resolveVaultPath, updateVaultPosition } from "../ui/services/vaults.ts";
 import { sanitizeSvgText } from "../ui/utils/svgSanitizer.ts";
+import { setMockInvoker } from "../ui/ipc.ts";
 import type { Node, Vault } from "../ui/ipc.ts";
 
 function runDoorServiceTests() {
@@ -240,6 +241,95 @@ async function runIpcResultTests() {
   }
 }
 
+async function runVaultPositionDebounceTests() {
+  const invocations: Array<{ command: string; payload: Record<string, unknown> | undefined }> = [];
+
+  // Register mock invoker to log IPC calls
+  setMockInvoker(async (command, payload) => {
+    invocations.push({ command, payload });
+    return { ok: true };
+  });
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  // Case 1: Single position update triggers after 300ms
+  updateVaultPosition("vault-100", 10, 20);
+  if (invocations.length !== 0) {
+    throw new Error("updateVaultPosition debounce failed: invoked immediately before delay");
+  }
+
+  await sleep(150);
+  if (invocations.length !== 0) {
+    throw new Error("updateVaultPosition debounce failed: invoked prematurely at 150ms");
+  }
+
+  await sleep(250); // 400ms total
+  if (invocations.length !== 1) {
+    throw new Error(
+      `updateVaultPosition debounce failed: expected exactly 1 invocation, got ${invocations.length}`
+    );
+  }
+  if (invocations[0].command !== "vault_update_position") {
+    throw new Error(
+      `updateVaultPosition debounce failed: expected command 'vault_update_position', got '${invocations[0].command}'`
+    );
+  }
+  if (
+    invocations[0].payload?.vaultId !== "vault-100" ||
+    invocations[0].payload?.x !== 10 ||
+    invocations[0].payload?.y !== 20
+  ) {
+    throw new Error(
+      `updateVaultPosition debounce failed: incorrect payload parameters, got ${JSON.stringify(invocations[0].payload)}`
+    );
+  }
+
+  // Clear tracked invocations
+  invocations.length = 0;
+
+  // Case 2: Rapid sequential position updates are correctly debounced (only last one succeeds)
+  updateVaultPosition("vault-200", 5, 5);
+  await sleep(100);
+  updateVaultPosition("vault-200", 15, 15);
+  await sleep(100);
+  updateVaultPosition("vault-200", 25, 35); // final coordinates
+
+  // At this point, no invocation should have happened yet (timer reset twice)
+  if (invocations.length !== 0) {
+    throw new Error(
+      "updateVaultPosition debounce failed: premature invocation during rapid updates"
+    );
+  }
+
+  // Wait 150ms (total 350ms since first call, but only 150ms since last call)
+  await sleep(150);
+  if (invocations.length !== 0) {
+    throw new Error(
+      "updateVaultPosition debounce failed: premature invocation 150ms after final update"
+    );
+  }
+
+  // Wait another 250ms (total 400ms since final call)
+  await sleep(250);
+  if (invocations.length !== 1) {
+    throw new Error(
+      `updateVaultPosition debounce failed: expected exactly 1 debounced call, got ${invocations.length}`
+    );
+  }
+  if (
+    invocations[0].payload?.vaultId !== "vault-200" ||
+    invocations[0].payload?.x !== 25 ||
+    invocations[0].payload?.y !== 35
+  ) {
+    throw new Error(
+      `updateVaultPosition debounce failed: incorrect final payload parameters, got ${JSON.stringify(invocations[0].payload)}`
+    );
+  }
+
+  // Clean up mock invoker for other tests
+  setMockInvoker(null);
+}
+
 try {
   runPrivacyTests();
   console.log("✓ All frontend privacy utility tests passed successfully!");
@@ -251,6 +341,8 @@ try {
   console.log("✓ All SVG sanitizer utility tests passed successfully!");
   await runIpcResultTests();
   console.log("✓ All IPC result unwrapping utility tests passed successfully!");
+  await runVaultPositionDebounceTests();
+  console.log("✓ All vault position debounce utility tests passed successfully!");
   process.exit(0);
 } catch (err) {
   console.error("Frontend utility self-test failed:", err);
