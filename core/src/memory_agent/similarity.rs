@@ -218,7 +218,7 @@ pub fn jaccard_similarity_pretokenized(set_a: &HashSet<String>, set_b: &HashSet<
     }
 
     let intersection_size = set_a.intersection(set_b).count() as f64;
-    let union_size = set_a.union(set_b).count() as f64;
+    let union_size = (set_a.len() + set_b.len()) as f64 - intersection_size;
 
     intersection_size / union_size
 }
