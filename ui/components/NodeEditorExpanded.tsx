@@ -675,6 +675,7 @@ export default function NodeEditorExpanded({
 
   async function onConfirmConnection() {
     if (!node || !doorTargetId) return;
+    setStatus("");
     const result = repointDoorId
       ? await repointDoor(repointDoorId, doorTargetId)
       : await createDoor({
@@ -690,6 +691,8 @@ export default function NodeEditorExpanded({
       setDoorTargetId(null);
       setDoorLabelInput("");
       setRepointDoorId(null);
+    } else {
+      setStatus(result.error.message);
     }
   }
 
