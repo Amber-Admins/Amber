@@ -61,14 +61,20 @@ function stripLaTeXComments(code: string): string {
   return code
     .split("\n")
     .map((line) => {
-      let i = 0;
-      while (i < line.length) {
+      for (let i = 0; i < line.length; i++) {
         if (line[i] === "%") {
-          if (i === 0 || line[i - 1] !== "\\") {
+          // Count consecutive backslashes immediately preceding this %
+          let backslashCount = 0;
+          let j = i - 1;
+          while (j >= 0 && line[j] === "\\") {
+            backslashCount++;
+            j--;
+          }
+          // Odd count = escaped \%, even count (including 0) = real comment
+          if (backslashCount % 2 === 0) {
             return line.substring(0, i);
           }
         }
-        i++;
       }
       return line;
     })
