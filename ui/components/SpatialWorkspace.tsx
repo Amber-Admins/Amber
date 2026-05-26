@@ -473,9 +473,6 @@ export default function SpatialWorkspace({
 
   // Inline rename saving
   const handleRenameSave = async (id: string, type: "vault" | "subvault" | "node") => {
-    if (editingItemType) {
-      console.log(`Renaming ${editingItemType} to: ${editValue}`);
-    }
     if (!editValue.trim()) {
       setEditingItemId(null);
       return;
