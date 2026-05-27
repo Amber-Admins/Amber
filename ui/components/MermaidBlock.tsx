@@ -16,7 +16,7 @@ interface MermaidBlockProps {
 mermaid.initialize({
   startOnLoad: false,
   theme: "neutral",
-  securityLevel: "loose",
+  securityLevel: "strict",
   fontFamily: "inherit",
   themeVariables: {
     fontFamily: "inherit",
