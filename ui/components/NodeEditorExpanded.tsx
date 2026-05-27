@@ -1084,6 +1084,7 @@ export default function NodeEditorExpanded({
                         className="door-delete-btn"
                         onClick={() => void onDoorDelete(door.id)}
                         title="Delete door link"
+                        aria-label="Delete door"
                       >
                         ×
                       </button>
