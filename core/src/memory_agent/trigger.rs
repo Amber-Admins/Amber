@@ -58,7 +58,12 @@ pub fn should_extract(conn: &Connection, session_id: &str) -> Result<bool, Strin
         get_setting_int(conn, "memory_agent_last_extract_message_count")?;
 
     // 3. Compute message count difference
-    let diff = current_message_count - last_extract_message_count;
+    let last_count = if current_message_count < last_extract_message_count {
+        0
+    } else {
+        last_extract_message_count
+    };
+    let diff = current_message_count - last_count;
     if diff < 6 {
         return Ok(false);
     }
