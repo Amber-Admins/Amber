@@ -170,12 +170,13 @@ export default function NodeEditorExpanded({
 
   // Safe file name slugification helper
   const getTitleSlug = (title: string): string => {
-    return title
+    const slug = title
       .toLowerCase()
       .replace(/[^a-z0-9\s-_]+/g, "")
       .trim()
       .replace(/\s+/g, "-")
       .replace(/-+/g, "-");
+    return slug || "untitled";
   };
 
   // Copy Markdown Action Handler
