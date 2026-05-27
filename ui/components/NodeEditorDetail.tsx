@@ -117,7 +117,7 @@ export default function NodeEditorDetail({
     const openIdx = before.lastIndexOf("[[");
     if (openIdx === -1) return;
 
-    // Useconfirmed tag output syntax [[Title|node_id]]
+    // Use confirmed tag output syntax [[Title|node_id]]
     const replacement = `[[${targetNode.title}|${targetNode.id}]]`;
     const newText = text.slice(0, openIdx) + replacement + text.slice(pos);
 
