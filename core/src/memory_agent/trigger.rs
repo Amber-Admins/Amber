@@ -1,4 +1,4 @@
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn get_setting_int(conn: &Connection, key: &str) -> Result<i64, String> {
@@ -8,14 +8,7 @@ fn get_setting_int(conn: &Connection, key: &str) -> Result<i64, String> {
             [key],
             |row| row.get(0),
         )
-        .map(Some)
-        .or_else(|err| {
-            if matches!(err, rusqlite::Error::QueryReturnedNoRows) {
-                Ok(None)
-            } else {
-                Err(err)
-            }
-        })
+        .optional()
         .map_err(|err| format!("Failed reading setting {key}: {err}"))?;
 
     match val_str {
