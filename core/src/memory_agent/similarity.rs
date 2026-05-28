@@ -191,7 +191,7 @@ pub fn tokenize(text: &str) -> HashSet<String> {
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|word| !word.is_empty())
         .map(|word| word.to_lowercase())
-        .filter(|word| !STOPWORDS.contains(&word.as_str()))
+        .filter(|word| STOPWORDS.binary_search(&word.as_str()).is_err())
         .collect()
 }
 
