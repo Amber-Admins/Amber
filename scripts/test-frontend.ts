@@ -33,7 +33,7 @@ globalThis.window = {
 import { runPrivacyTests } from "../ui/utils/privacy.ts";
 import { AppError, toAppError, unwrapIpcResult } from "../ui/services/ipcResult.ts";
 import { resolveVaultPath, updateVaultPosition } from "../ui/services/vaults.ts";
-import { sanitizeSvgText } from "../ui/utils/svgSanitizer.ts";
+import { sanitizeSvgText, sanitizeSvg } from "../ui/utils/svgSanitizer.ts";
 import { setMockInvoker } from "../ui/ipc.ts";
 import { getLlmMode, setLlmMode } from "../ui/utils/settings.ts";
 import type { Node, Vault } from "../ui/ipc.ts";
@@ -243,6 +243,21 @@ function runSvgSanitizerTests() {
 
   // Test 6: Emoji characters (should be stripped)
   assertSanitized("Hello 🚀!", "Hello ", "Test 6");
+
+  // Only test sanitizeSvg in environments where DOMParser is defined
+  if (typeof globalThis.DOMParser !== "undefined") {
+    const dirtySvg = `<svg><script>alert('XSS')</script><rect onclick="alert('XSS')" href="javascript:alert('XSS')" width="100"/></svg>`;
+    const sanitized = sanitizeSvg(dirtySvg);
+    if (
+      sanitized.includes("<script") ||
+      sanitized.includes("onclick") ||
+      sanitized.includes("javascript:")
+    ) {
+      throw new Error(
+        "runSvgSanitizerTests Failed: sanitizeSvg failed to strip script elements, event handlers, or javascript: attributes"
+      );
+    }
+  }
 }
 
 async function runIpcResultTests() {

@@ -7,6 +7,7 @@ import {
   TbSourceCode,
   TbVector,
 } from "react-icons/tb";
+import { sanitizeSvg } from "../utils/svgSanitizer";
 
 interface MermaidBlockProps {
   code: string;
@@ -77,7 +78,7 @@ export default function MermaidBlock({ code }: MermaidBlockProps) {
 
   useEffect(() => {
     if (containerRef.current) {
-      containerRef.current.innerHTML = svg;
+      containerRef.current.innerHTML = sanitizeSvg(svg);
     }
   }, [svg, viewSource]);
 
