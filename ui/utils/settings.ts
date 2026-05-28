@@ -148,7 +148,29 @@ export function getPlantUmlServer(): string {
 }
 
 export function setPlantUmlServer(url: string): void {
-  const normalized = url.trim();
-  window.localStorage.setItem(PLANTUML_SERVER_KEY, normalized || DEFAULT_PLANTUML_SERVER);
+  let normalized = url.trim();
+  if (!normalized) {
+    normalized = DEFAULT_PLANTUML_SERVER;
+  } else {
+    // 1. If it doesn't start with http:// or https://, prepend https:// by default
+    if (!/^https?:\/\//i.test(normalized)) {
+      normalized = "https://" + normalized;
+    }
+
+    // 2. Validate URL format and restrict to HTTP/HTTPS schemes to prevent arbitrary injection
+    try {
+      const parsed = new URL(normalized);
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        normalized = DEFAULT_PLANTUML_SERVER;
+      } else {
+        // Strip trailing slashes to ensure clean path concatenation later
+        normalized = parsed.origin + parsed.pathname.replace(/\/+$/, "");
+      }
+    } catch {
+      normalized = DEFAULT_PLANTUML_SERVER;
+    }
+  }
+
+  window.localStorage.setItem(PLANTUML_SERVER_KEY, normalized);
   window.dispatchEvent(new CustomEvent("mindvault:llm-settings-changed"));
 }

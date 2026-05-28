@@ -39,7 +39,12 @@ import { AppError, toAppError, unwrapIpcResult } from "../ui/services/ipcResult.
 import { resolveVaultPath, updateVaultPosition } from "../ui/services/vaults.ts";
 import { sanitizeSvgText, sanitizeSvg } from "../ui/utils/svgSanitizer.ts";
 import { setMockInvoker } from "../ui/ipc.ts";
-import { getLlmMode, setLlmMode } from "../ui/utils/settings.ts";
+import {
+  getLlmMode,
+  setLlmMode,
+  getPlantUmlServer,
+  setPlantUmlServer,
+} from "../ui/utils/settings.ts";
 import type { Node, Vault } from "../ui/ipc.ts";
 
 function runDoorServiceTests() {
@@ -454,6 +459,42 @@ function runSettingsTests() {
     throw new Error(
       `setLlmMode Test 8 Failed: Expected synchronized cloud provider 'openai', got '${cloudProvider}'`
     );
+  }
+
+  // Test 9: getPlantUmlServer defaults to default if key not present
+  const defaultServer = getPlantUmlServer();
+  if (defaultServer !== "https://www.plantuml.com/plantuml") {
+    throw new Error(`getPlantUmlServer Test 9 Failed: Expected default, got '${defaultServer}'`);
+  }
+
+  // Test 10: setPlantUmlServer trims and normalizes valid HTTPS URL
+  setPlantUmlServer("  https://my-plantuml-server.com/puml/  ");
+  const puml1 = getPlantUmlServer();
+  if (puml1 !== "https://my-plantuml-server.com/puml") {
+    throw new Error(`setPlantUmlServer Test 10 Failed: Expected normalized URL, got '${puml1}'`);
+  }
+
+  // Test 11: setPlantUmlServer prepends https:// if protocol is missing
+  setPlantUmlServer("local-plantuml:8080/puml");
+  const puml2 = getPlantUmlServer();
+  if (puml2 !== "https://local-plantuml:8080/puml") {
+    throw new Error(`setPlantUmlServer Test 11 Failed: Expected prepended https, got '${puml2}'`);
+  }
+
+  // Test 12: setPlantUmlServer rejects invalid protocols (e.g. javascript:) and falls back to default
+  setPlantUmlServer("javascript:alert(1)");
+  const puml3 = getPlantUmlServer();
+  if (puml3 !== "https://www.plantuml.com/plantuml") {
+    throw new Error(
+      `setPlantUmlServer Test 12 Failed: Expected fallback on invalid protocol, got '${puml3}'`
+    );
+  }
+
+  // Test 13: setPlantUmlServer handles http:// correctly
+  setPlantUmlServer("http://localhost:8080/puml/");
+  const puml4 = getPlantUmlServer();
+  if (puml4 !== "http://localhost:8080/puml") {
+    throw new Error(`setPlantUmlServer Test 13 Failed: Expected HTTP URL kept, got '${puml4}'`);
   }
 
   // Reset/clean up
