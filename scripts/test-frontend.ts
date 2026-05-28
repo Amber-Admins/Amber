@@ -39,6 +39,7 @@ import { AppError, toAppError, unwrapIpcResult } from "../ui/services/ipcResult.
 import { resolveVaultPath, updateVaultPosition } from "../ui/services/vaults.ts";
 import { sanitizeSvgText, sanitizeSvg } from "../ui/utils/svgSanitizer.ts";
 import { setMockInvoker } from "../ui/ipc.ts";
+import { preprocessWikiLinks } from "../ui/utils/wikilinkUtils.ts";
 import {
   getLlmMode,
   setLlmMode,
@@ -502,6 +503,33 @@ function runSettingsTests() {
   dispatchedEvents.length = 0;
 }
 
+function runWikiLinksTests() {
+  // Test 1: [[Title|id]] format
+  const res1 = preprocessWikiLinks("[[My Node|node-123]]");
+  if (res1 !== "[My Node](#node/node-123)") {
+    throw new Error(
+      `preprocessWikiLinks Test 1 Failed: Expected '[My Node](#node/node-123)', got '${res1}'`
+    );
+  }
+
+  // Test 2: Standard [[Title]] format
+  const res2 = preprocessWikiLinks("[[My Standard Node]]");
+  if (res2 !== "[My Standard Node](#node/search:My Standard Node)") {
+    throw new Error(
+      `preprocessWikiLinks Test 2 Failed: Expected '[My Standard Node](#node/search:My Standard Node)', got '${res2}'`
+    );
+  }
+
+  // Test 3: Multiple occurrences and mixed formats
+  const mixed = "Check [[First Node|node-1]] and also [[Second Node]] in detail.";
+  const res3 = preprocessWikiLinks(mixed);
+  const expected =
+    "Check [First Node](#node/node-1) and also [Second Node](#node/search:Second Node) in detail.";
+  if (res3 !== expected) {
+    throw new Error(`preprocessWikiLinks Test 3 Failed: Expected '${expected}', got '${res3}'`);
+  }
+}
+
 try {
   runPrivacyTests();
   console.log("✓ All frontend privacy utility tests passed successfully!");
@@ -515,6 +543,8 @@ try {
   console.log("✓ All IPC result unwrapping utility tests passed successfully!");
   await runVaultPositionDebounceTests();
   console.log("✓ All vault position debounce utility tests passed successfully!");
+  runWikiLinksTests();
+  console.log("✓ All wikilink preprocessor utility tests passed successfully!");
   runSettingsTests();
   console.log("✓ All settings utility tests passed successfully!");
   process.exit(0);

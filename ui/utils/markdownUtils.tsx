@@ -143,11 +143,7 @@ export function CodeBlock({ language, code }: CodeBlockProps) {
   );
 }
 
-/** Preprocesses [[Node Title|node_id]] into [Node Title](#node/node_id) markdown link format */
-export function preprocessWikiLinks(text: string): string {
-  if (!text) return "";
-  return text.replace(/\[\[([^|\]\n]+)\|([^\]\n]+)\]\]/g, "[$1](#node/$2)");
-}
+export { preprocessWikiLinks } from "./wikilinkUtils";
 
 /** Detects if the given text has raw LaTeX document structure (checking for \documentclass or \begin{document}) */
 export function isRawLatex(text: string): boolean {
@@ -185,6 +181,7 @@ export function createMarkdownComponents(
             .split(/#node\/|mindvault:\/\/node\//)
             .pop()
             ?.split(/[?#]/)[0] || "";
+        const decodedNodeId = decodeURIComponent(nodeId);
         return (
           <button
             type="button"
@@ -193,10 +190,37 @@ export function createMarkdownComponents(
               e.preventDefault();
               e.stopPropagation();
               if (onSelectNode) {
-                onSelectNode(nodeId);
+                if (decodedNodeId.startsWith("search:")) {
+                  const query = decodedNodeId.substring(7).trim();
+                  // Dynamically load node search to resolve case-insensitive exact title match
+                  import("../services/nodes")
+                    .then(({ getAllNodes }) => {
+                      getAllNodes()
+                        .then((nodes) => {
+                          const match = nodes.find(
+                            (n) => n.title.toLowerCase().trim() === query.toLowerCase()
+                          );
+                          if (match) {
+                            onSelectNode(match.id);
+                          } else {
+                            console.warn(`Node with title "${query}" not found in current vault.`);
+                          }
+                        })
+                        .catch((err) => console.error("Failed to query nodes for wikilink:", err));
+                    })
+                    .catch((err) =>
+                      console.error("Failed to load node service for wikilink:", err)
+                    );
+                } else {
+                  onSelectNode(nodeId);
+                }
               }
             }}
-            title={`Navigate to: ${children}`}
+            title={
+              decodedNodeId.startsWith("search:")
+                ? `Search/Navigate to: ${children}`
+                : `Navigate to: ${children}`
+            }
           >
             <span className="wikilink-badge-icon">↗</span> {children}
           </button>
