@@ -52,8 +52,8 @@ export async function listChangesetItems(changesetId: string): Promise<Changeset
   return unwrapIpcResult(changesetListItems(changesetId));
 }
 
-// Expose temporary debug helpers on window for manual console testing
-if (typeof window !== "undefined") {
+// Expose temporary debug helpers on window for manual console testing only in development builds
+if (typeof window !== "undefined" && import.meta.env.DEV) {
   const w = window as unknown as Record<string, unknown>;
   w.testMemoryExtract = (provider?: string, endpoint?: string, model?: string) => {
     const p = provider || "ollama";
