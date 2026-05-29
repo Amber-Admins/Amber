@@ -5,19 +5,7 @@ use crate::memory_agent::similarity::{
 };
 use rusqlite::Connection;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::sync::{OnceLock, RwLock};
-
-struct CachedTokenizedNode {
-    version: i32,
-    tokens: HashSet<String>,
-}
-
-static TOKENIZATION_CACHE: OnceLock<RwLock<HashMap<String, CachedTokenizedNode>>> = OnceLock::new();
-
-fn get_tokenization_cache() -> &'static RwLock<HashMap<String, CachedTokenizedNode>> {
-    TOKENIZATION_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
-}
+use std::collections::HashSet;
 
 /// The type of action proposed by an individual item in a changeset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -96,7 +84,6 @@ struct DbNode {
     title: String,
     summary: String,
     node_type: String,
-    version: i32,
 }
 
 fn fetch_node_detail(conn: &Connection, node_id: &str) -> Result<Option<String>, String> {
@@ -164,7 +151,7 @@ pub fn build_changeset(
     // 3. Construct parameterized query to only fetch nodes in the relevant vaults
     let (query_str, params) = if !has_context {
         (
-            "SELECT id, vault_id, title, summary, node_type, version
+            "SELECT id, vault_id, title, summary, node_type
              FROM nodes
              WHERE deleted_at IS NULL AND is_archived = 0;"
                 .to_string(),
@@ -173,7 +160,7 @@ pub fn build_changeset(
     } else {
         let placeholders = vec!["?"; relevant_vaults.len()].join(", ");
         let query = format!(
-            "SELECT id, vault_id, title, summary, node_type, version
+            "SELECT id, vault_id, title, summary, node_type
              FROM nodes
              WHERE deleted_at IS NULL AND is_archived = 0 AND vault_id IN ({placeholders});"
         );
@@ -196,50 +183,16 @@ pub fn build_changeset(
                 title: row.get(2)?,
                 summary: row.get(3)?,
                 node_type: row.get(4)?,
-                version: row.get(5)?,
             })
         })
         .map_err(|err| format!("Failed to execute nodes query: {err}"))?;
 
     // Pre-tokenize existing nodes once (N tokenizations) to avoid re-tokenizing
     let mut existing_nodes: Vec<(DbNode, HashSet<String>)> = Vec::new();
-    let cache = get_tokenization_cache();
 
     for row_res in node_rows {
         let node = row_res.map_err(|err| format!("Failed to parse database node: {err}"))?;
-
-        let cached_tokens = {
-            if let Ok(read_guard) = cache.read() {
-                if let Some(cached) = read_guard.get(&node.id) {
-                    if cached.version == node.version {
-                        Some(cached.tokens.clone())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        };
-
-        let tokens = if let Some(t) = cached_tokens {
-            t
-        } else {
-            let t = tokenize(&format!("{} {}", node.title, node.summary));
-            if let Ok(mut write_guard) = cache.write() {
-                write_guard.insert(
-                    node.id.clone(),
-                    CachedTokenizedNode {
-                        version: node.version,
-                        tokens: t.clone(),
-                    },
-                );
-            }
-            t
-        };
-
+        let tokens = tokenize(&format!("{} {}", node.title, node.summary));
         existing_nodes.push((node, tokens));
     }
 
@@ -1008,89 +961,5 @@ mod tests {
         assert_eq!(cs_p.items.len(), 1);
         assert_eq!(cs_p.items[0].item_type, ChangesetItemType::Add);
         assert_eq!(cs_p.items[0].target_node_id, None);
-    }
-
-    #[test]
-    fn test_tokenization_cache() {
-        let conn = setup_test_db();
-
-        let insert_sql = "
-            INSERT INTO nodes (id, vault_id, node_type, title, summary, detail, version)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);
-        ";
-
-        conn.execute(
-            insert_sql,
-            params![
-                "node_cache_test",
-                "vault_root_graph",
-                "concept",
-                "UniqueTitle",
-                "Simple Description",
-                None::<String>,
-                1
-            ],
-        )
-        .unwrap();
-
-        let candidates = vec![CandidateNode {
-            title: "UniqueTitle".to_string(),
-            summary: "Simple Description".to_string(),
-            detail: None,
-            node_type: Some("concept".to_string()),
-            target_vault_key: None,
-            tags: None,
-            confidence: 0.90,
-            action: CandidateAction::Add,
-        }];
-
-        // Run changeset build once, which should populate the cache
-        let cs = build_changeset(&conn, &candidates, "session_1").unwrap();
-        assert_eq!(cs.items.len(), 1);
-        assert_eq!(cs.items[0].item_type, ChangesetItemType::Update);
-
-        // Verify the node is now cached in memory
-        {
-            let cache = get_tokenization_cache();
-            let read_guard = cache.read().unwrap();
-            let cached = read_guard.get("node_cache_test").unwrap();
-            assert_eq!(cached.version, 1);
-            assert!(cached.tokens.contains("uniquetitle"));
-            assert!(cached.tokens.contains("description"));
-        }
-
-        // Update the version and content in the database
-        conn.execute(
-            "UPDATE nodes SET title = 'NewTitle', version = 2 WHERE id = 'node_cache_test';",
-            [],
-        )
-        .unwrap();
-
-        // Run changeset build again, which should invalidate and update the cache
-        let candidates_new = vec![CandidateNode {
-            title: "NewTitle".to_string(),
-            summary: "Simple Description".to_string(),
-            detail: None,
-            node_type: Some("concept".to_string()),
-            target_vault_key: None,
-            tags: None,
-            confidence: 0.90,
-            action: CandidateAction::Add,
-        }];
-
-        let cs2 = build_changeset(&conn, &candidates_new, "session_1").unwrap();
-        assert_eq!(cs2.items.len(), 1);
-        assert_eq!(cs2.items[0].item_type, ChangesetItemType::Update);
-
-        // Verify the cache has been updated to version 2 with the new tokens
-        {
-            let cache = get_tokenization_cache();
-            let read_guard = cache.read().unwrap();
-            let cached = read_guard.get("node_cache_test").unwrap();
-            assert_eq!(cached.version, 2);
-            assert!(cached.tokens.contains("newtitle"));
-            assert!(cached.tokens.contains("description"));
-            assert!(!cached.tokens.contains("uniquetitle")); // old unique word should be gone
-        }
     }
 }
