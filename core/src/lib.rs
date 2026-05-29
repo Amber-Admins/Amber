@@ -2805,6 +2805,7 @@ async fn llm_chat(
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
     let db_path = state.db_path.clone();
+    let persona_instruction = "You are MindVault's personalized, context-aware memory assistant.";
 
     let mut system_prompt = {
         let conn = open_connection(&db_path)?;
@@ -2864,15 +2865,14 @@ async fn llm_chat(
 
     if charts_enabled {
         if system_prompt.is_empty() {
-            system_prompt = format!(
-                "You are MindVault's personalized, context-aware memory assistant. {chart_instruction}"
-            );
+            system_prompt = format!("{persona_instruction} {chart_instruction}");
         } else {
-            system_prompt.push_str(chart_instruction);
+            system_prompt = format!("{persona_instruction}{chart_instruction}");
         }
     } else if system_prompt.is_empty() {
-        system_prompt =
-            "You are MindVault's personalized, context-aware memory assistant.".to_string();
+        system_prompt = persona_instruction.to_string();
+    } else {
+        system_prompt = format!("{persona_instruction}\n\n{system_prompt}");
     }
 
     let parsed_provider = match provider.trim().to_lowercase().as_str() {
