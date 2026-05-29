@@ -362,6 +362,11 @@ function ChatPanel({
   const threadEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const editInputRef = useRef<HTMLTextAreaElement>(null);
+  const messagesRef = useRef(messages);
+  const hiddenMessageCountRef = useRef(0);
+  const isSendingRef = useRef(isSending);
+  const isClearingRef = useRef(isClearing);
+  const executeLlmResponseRef = useRef<(prompt: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
     if (inputRef.current) {
@@ -518,6 +523,13 @@ function ChatPanel({
   }, [messages]);
   const hiddenMessageCount = Math.max(0, messages.length - visibleMessages.length);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+    hiddenMessageCountRef.current = hiddenMessageCount;
+    isSendingRef.current = isSending;
+    isClearingRef.current = isClearing;
+  });
+
   const executeLlmResponse = useCallback(
     async (promptText: string) => {
       setStatus("");
@@ -582,6 +594,10 @@ function ChatPanel({
     },
     [selectedNodeIds, scope, chartsEnabled, isRedactedUnlocked, agentMode, onRefreshPendingCount]
   );
+
+  useEffect(() => {
+    executeLlmResponseRef.current = executeLlmResponse;
+  }, [executeLlmResponse]);
 
   async function executeSendMessage(promptText: string) {
     if (isSending || isClearing || !promptText.trim()) return;
@@ -679,18 +695,19 @@ function ChatPanel({
 
   const handleSaveEdit = useCallback(
     async (visibleIndex: number, newContent: string) => {
-      if (isSending || isClearing || !newContent.trim()) return;
+      if (isSendingRef.current || isClearingRef.current || !newContent.trim()) return;
 
       // The UI passes an index relative to visibleMessages (a tail slice of messages).
       // Offset by hiddenMessageCount to get the correct index into the full messages array.
-      const index = visibleIndex + hiddenMessageCount;
-      const userMsg = messages[index];
+      const index = visibleIndex + hiddenMessageCountRef.current;
+      const msgs = messagesRef.current;
+      const userMsg = msgs[index];
       if (userMsg.content === newContent) {
         setEditingMessageId(null);
         return;
       }
 
-      const deleteIds = messages.slice(index + 1).map((m) => m.id);
+      const deleteIds = msgs.slice(index + 1).map((m) => m.id);
 
       try {
         await chatEditAndTruncate(userMsg.id, newContent, deleteIds);
@@ -703,30 +720,32 @@ function ChatPanel({
           return updated;
         });
         setEditingMessageId(null);
-        await executeLlmResponse(newContent);
+        await executeLlmResponseRef.current(newContent);
       } catch (error) {
         setStatus(String(error));
       }
     },
-    [isSending, isClearing, hiddenMessageCount, messages, executeLlmResponse]
+
+    []
   );
 
   const handleRetryMessage = useCallback(
     async (visibleIndex: number) => {
-      if (isSending || isClearing) return;
+      if (isSendingRef.current || isClearingRef.current) return;
 
       // The UI passes an index relative to visibleMessages (a tail slice of messages).
       // Offset by hiddenMessageCount to get the correct index into the full messages array.
-      const index = visibleIndex + hiddenMessageCount;
+      const msgs = messagesRef.current;
+      const index = visibleIndex + hiddenMessageCountRef.current;
 
       // Find the user message index
       let userIndex = -1;
-      if (messages[index].role === "user") {
+      if (msgs[index].role === "user") {
         userIndex = index;
       } else {
         // Find the last user message before this assistant message
         for (let i = index - 1; i >= 0; i--) {
-          if (messages[i].role === "user") {
+          if (msgs[i].role === "user") {
             userIndex = i;
             break;
           }
@@ -734,19 +753,20 @@ function ChatPanel({
       }
 
       if (userIndex !== -1) {
-        const userMsg = messages[userIndex];
-        const deleteIds = messages.slice(userIndex + 1).map((m) => m.id);
+        const userMsg = msgs[userIndex];
+        const deleteIds = msgs.slice(userIndex + 1).map((m) => m.id);
 
         try {
           await chatEditAndTruncate(userMsg.id, userMsg.content, deleteIds);
           setMessages((prev) => prev.slice(0, userIndex + 1));
-          await executeLlmResponse(userMsg.content);
+          await executeLlmResponseRef.current(userMsg.content);
         } catch (error) {
           setStatus(String(error));
         }
       }
     },
-    [isSending, isClearing, hiddenMessageCount, messages, executeLlmResponse]
+
+    []
   );
 
   function toggleDropdown(type: "vault" | "mode" | "model" | "overflow") {
