@@ -352,7 +352,7 @@ pub fn build_changeset(
                             let existing_detail = detail.as_deref().unwrap_or("").trim();
 
                             let mut is_substantial = false;
-                            if !candidate_detail.is_empty() || !existing_detail.is_empty() {
+                            if !candidate_detail.is_empty() {
                                 let detail_score =
                                     jaccard_similarity(candidate_detail, existing_detail);
                                 if detail_score < 0.30 {
@@ -744,6 +744,58 @@ mod tests {
             Err(e) => panic!("Failed to parse: {e}"),
         };
         assert_eq!(proposed.substantial_change, Some(true));
+    }
+
+    #[test]
+    fn test_empty_candidate_detail_does_not_upgrade_merge_to_update() {
+        let conn = setup_test_db();
+        let insert_sql = "
+            INSERT INTO nodes (id, vault_id, node_type, title, summary, detail)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6);
+        ";
+        if let Err(e) = conn.execute(
+            insert_sql,
+            params![
+                "node_ai",
+                "vault_learning",
+                "concept",
+                "Artificial Intelligence and cognitive systems",
+                "Systems that mimic human intelligence and cognitive behavior",
+                "Focuses on symbolic reasoning and expert systems"
+            ],
+        ) {
+            panic!("Insert failed: {e}");
+        }
+
+        let candidates = vec![CandidateNode {
+            title: "Artificial Intelligence".to_string(),
+            summary: "Systems that mimic human intelligence".to_string(),
+            detail: Some("   ".to_string()),
+            node_type: Some("concept".to_string()),
+            target_vault_key: Some("learning".to_string()),
+            tags: None,
+            confidence: 0.80,
+            action: CandidateAction::Add,
+        }];
+
+        let changeset = match build_changeset(&conn, &candidates, "session-123") {
+            Ok(cs) => cs,
+            Err(e) => panic!("Expected Ok changeset: {e}"),
+        };
+
+        assert_eq!(changeset.items.len(), 1);
+        assert_eq!(changeset.items[0].item_type, ChangesetItemType::Merge);
+        assert_eq!(
+            changeset.items[0].merge_with_id,
+            Some("node_ai".to_string())
+        );
+
+        let proposed: ProposedNodeData =
+            match serde_json::from_str(&changeset.items[0].proposed_data) {
+                Ok(p) => p,
+                Err(e) => panic!("Failed to parse: {e}"),
+            };
+        assert_eq!(proposed.substantial_change, None);
     }
 
     #[test]
