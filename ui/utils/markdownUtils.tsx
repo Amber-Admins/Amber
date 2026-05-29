@@ -7,6 +7,7 @@ import ChartBlock from "../components/ChartBlock";
 import MermaidBlock from "../components/MermaidBlock";
 import PlantUmlBlock from "../components/PlantUmlBlock";
 import LatexBlock from "../components/LatexBlock";
+import { getAllNodes } from "../services/nodes";
 import "katex/dist/katex.min.css";
 import {
   TbBrandPython,
@@ -192,25 +193,18 @@ export function createMarkdownComponents(
               if (onSelectNode) {
                 if (decodedNodeId.startsWith("search:")) {
                   const query = decodedNodeId.substring(7).trim();
-                  // Dynamically load node search to resolve case-insensitive exact title match
-                  import("../services/nodes")
-                    .then(({ getAllNodes }) => {
-                      getAllNodes()
-                        .then((nodes) => {
-                          const match = nodes.find(
-                            (n) => n.title.toLowerCase().trim() === query.toLowerCase()
-                          );
-                          if (match) {
-                            onSelectNode(match.id);
-                          } else {
-                            console.warn(`Node with title "${query}" not found in current vault.`);
-                          }
-                        })
-                        .catch((err) => console.error("Failed to query nodes for wikilink:", err));
+                  getAllNodes()
+                    .then((nodes) => {
+                      const match = nodes.find(
+                        (n) => n.title.toLowerCase().trim() === query.toLowerCase()
+                      );
+                      if (match) {
+                        onSelectNode(match.id);
+                      } else {
+                        console.warn(`Node with title "${query}" not found in current vault.`);
+                      }
                     })
-                    .catch((err) =>
-                      console.error("Failed to load node service for wikilink:", err)
-                    );
+                    .catch((err) => console.error("Failed to query nodes for wikilink:", err));
                 } else {
                   onSelectNode(decodedNodeId);
                 }
