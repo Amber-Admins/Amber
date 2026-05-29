@@ -97,22 +97,21 @@ fn normalize_required(value: String, field_name: &str, index: usize) -> Result<S
     Ok(trimmed.to_string())
 }
 
-fn validate_node_type(value: Option<String>, index: usize) -> Result<Option<String>, String> {
-    let Some(raw_value) = value else {
-        return Ok(None);
-    };
+fn validate_node_type(value: Option<String>, index: usize) -> Option<String> {
+    let raw_value = value?;
     let normalized = raw_value.trim().to_lowercase();
     if normalized.is_empty() {
-        return Ok(None);
+        return None;
     }
     if ALLOWED_NODE_TYPES.contains(&normalized.as_str()) {
-        Ok(Some(normalized))
+        Some(normalized)
     } else {
-        Err(format!(
-            "Candidate {} has unsupported node_type '{}'",
+        eprintln!(
+            "Warning: Candidate {} has unsupported node_type '{}'; falling back to None.",
             index + 1,
             raw_value
-        ))
+        );
+        None
     }
 }
 
@@ -174,7 +173,7 @@ pub fn parse_candidates_json(raw_json: &str) -> Result<Vec<CandidateNode>, Strin
             let title = normalize_required(raw.title, "title", index)?;
             let summary = normalize_required(raw.summary, "summary", index)?;
             let detail = normalize_non_empty(raw.detail);
-            let node_type = validate_node_type(raw.node_type, index)?;
+            let node_type = validate_node_type(raw.node_type, index);
             let target_vault_key = validate_target_vault_key(raw.target_vault_key, index)?;
             let tags = normalize_tags(raw.tags, index)?;
 
@@ -334,11 +333,45 @@ mod tests {
     }
   ]
 }"#;
-        let err = match parse_candidates_json(payload) {
-            Ok(_) => panic!("expected invalid node type to fail"),
-            Err(e) => e,
+        let parsed = match parse_candidates_json(payload) {
+            Ok(val) => val,
+            Err(err) => panic!("expected invalid node type to fall back to None, not fail: {err}"),
         };
-        assert!(err.contains("unsupported node_type 'super_fancy_type'"));
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].node_type, None);
+    }
+
+    #[test]
+    fn parse_invalid_node_type_falls_back_to_none() {
+        let payload = r#"{
+    "candidates": [
+        {
+            "action": "add",
+            "title": "Hiking",
+            "summary": "Enjoys outdoor hiking.",
+            "node_type": "preferences",
+            "confidence": 0.9
+        },
+        {
+            "action": "add",
+            "title": "Valid preference",
+            "summary": "Prefers quiet coffee shops.",
+            "node_type": "preference",
+            "confidence": 0.95
+        }
+    ]
+}"#;
+
+        let parsed = match parse_candidates_json(payload) {
+            Ok(val) => val,
+            Err(err) => {
+                panic!("Expected invalid node_type to be downgraded, not fail parsing: {err}")
+            }
+        };
+
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].node_type, None);
+        assert_eq!(parsed[1].node_type.as_deref(), Some("preference"));
     }
 
     #[test]
