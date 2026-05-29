@@ -518,67 +518,70 @@ function ChatPanel({
   }, [messages]);
   const hiddenMessageCount = Math.max(0, messages.length - visibleMessages.length);
 
-  async function executeLlmResponse(promptText: string) {
-    setStatus("");
-    setIsSending(true);
+  const executeLlmResponse = useCallback(
+    async (promptText: string) => {
+      setStatus("");
+      setIsSending(true);
 
-    try {
-      const provider = getLlmProvider();
-      let endpoint = "";
-      if (provider === "lmstudio") {
-        endpoint = getLmStudioEndpoint();
-      } else if (provider === "ollama") {
-        endpoint = getOllamaEndpoint();
-      } else if (["openai", "anthropic", "google", "xai"].includes(provider)) {
-        endpoint = await getApiKey(provider);
+      try {
+        const provider = getLlmProvider();
+        let endpoint = "";
+        if (provider === "lmstudio") {
+          endpoint = getLmStudioEndpoint();
+        } else if (provider === "ollama") {
+          endpoint = getOllamaEndpoint();
+        } else if (["openai", "anthropic", "google", "xai"].includes(provider)) {
+          endpoint = await getApiKey(provider);
+        }
+        const model = getLlmModel();
+
+        let executionPrompt = promptText;
+        if (agentMode === "Ingest/Memory") {
+          executionPrompt = `[Agent Mode: Ingest/Memory] Please extract, deduplicate, and store the following input as a new Node in the memory system. Do not generate a long conversational response, just confirm storage details or output a brief success summary:\n\n${promptText}`;
+        } else if (agentMode === "Onboarding") {
+          executionPrompt = `[Agent Mode: Onboarding] Act as the Onboarding Agent. Conduct an interview and ask clarifying questions to help build initial context for the user:\n\n${promptText}`;
+        }
+
+        const aiResponse = await chatWithScope(
+          selectedNodeIds,
+          scope,
+          provider,
+          endpoint,
+          model,
+          executionPrompt,
+          chartsEnabled,
+          isRedactedUnlocked
+        );
+
+        const aiMsgId = crypto.randomUUID();
+        const aiMsg: ChatMessage = {
+          id: aiMsgId,
+          role: "assistant",
+          content: aiResponse,
+          created_at: new Date().toISOString(),
+        };
+
+        setMessages((prev) => [...prev, aiMsg]);
+        await chatAppendMessage(aiMsgId, "assistant", aiResponse);
+
+        // Fire-and-forget background extraction check (non-blocking for the user)
+        extractMemoryIfReady(provider, endpoint, model)
+          .then((changeset) => {
+            if (changeset && onRefreshPendingCount) {
+              onRefreshPendingCount();
+            }
+          })
+          .catch((err) => {
+            console.error("Background memory extraction check failed:", err);
+          });
+      } catch (error) {
+        setStatus(String(error));
+      } finally {
+        setIsSending(false);
       }
-      const model = getLlmModel();
-
-      let executionPrompt = promptText;
-      if (agentMode === "Ingest/Memory") {
-        executionPrompt = `[Agent Mode: Ingest/Memory] Please extract, deduplicate, and store the following input as a new Node in the memory system. Do not generate a long conversational response, just confirm storage details or output a brief success summary:\n\n${promptText}`;
-      } else if (agentMode === "Onboarding") {
-        executionPrompt = `[Agent Mode: Onboarding] Act as the Onboarding Agent. Conduct an interview and ask clarifying questions to help build initial context for the user:\n\n${promptText}`;
-      }
-
-      const aiResponse = await chatWithScope(
-        selectedNodeIds,
-        scope,
-        provider,
-        endpoint,
-        model,
-        executionPrompt,
-        chartsEnabled,
-        isRedactedUnlocked
-      );
-
-      const aiMsgId = crypto.randomUUID();
-      const aiMsg: ChatMessage = {
-        id: aiMsgId,
-        role: "assistant",
-        content: aiResponse,
-        created_at: new Date().toISOString(),
-      };
-
-      setMessages((prev) => [...prev, aiMsg]);
-      await chatAppendMessage(aiMsgId, "assistant", aiResponse);
-
-      // Fire-and-forget background extraction check (non-blocking for the user)
-      extractMemoryIfReady(provider, endpoint, model)
-        .then((changeset) => {
-          if (changeset && onRefreshPendingCount) {
-            onRefreshPendingCount();
-          }
-        })
-        .catch((err) => {
-          console.error("Background memory extraction check failed:", err);
-        });
-    } catch (error) {
-      setStatus(String(error));
-    } finally {
-      setIsSending(false);
-    }
-  }
+    },
+    [selectedNodeIds, scope, chartsEnabled, isRedactedUnlocked, agentMode, onRefreshPendingCount]
+  );
 
   async function executeSendMessage(promptText: string) {
     if (isSending || isClearing || !promptText.trim()) return;
@@ -674,71 +677,77 @@ function ChatPanel({
     setEditingContent("");
   }, []);
 
-  async function handleSaveEdit(visibleIndex: number, newContent: string) {
-    if (isSending || isClearing || !newContent.trim()) return;
+  const handleSaveEdit = useCallback(
+    async (visibleIndex: number, newContent: string) => {
+      if (isSending || isClearing || !newContent.trim()) return;
 
-    // The UI passes an index relative to visibleMessages (a tail slice of messages).
-    // Offset by hiddenMessageCount to get the correct index into the full messages array.
-    const index = visibleIndex + hiddenMessageCount;
-    const userMsg = messages[index];
-    if (userMsg.content === newContent) {
-      setEditingMessageId(null);
-      return;
-    }
-
-    const deleteIds = messages.slice(index + 1).map((m) => m.id);
-
-    try {
-      await chatEditAndTruncate(userMsg.id, newContent, deleteIds);
-      setMessages((prev) => {
-        const updated = [...prev.slice(0, index)];
-        updated.push({
-          ...userMsg,
-          content: newContent,
-        });
-        return updated;
-      });
-      setEditingMessageId(null);
-      await executeLlmResponse(newContent);
-    } catch (error) {
-      setStatus(String(error));
-    }
-  }
-
-  async function handleRetryMessage(visibleIndex: number) {
-    if (isSending || isClearing) return;
-
-    // The UI passes an index relative to visibleMessages (a tail slice of messages).
-    // Offset by hiddenMessageCount to get the correct index into the full messages array.
-    const index = visibleIndex + hiddenMessageCount;
-
-    // Find the user message index
-    let userIndex = -1;
-    if (messages[index].role === "user") {
-      userIndex = index;
-    } else {
-      // Find the last user message before this assistant message
-      for (let i = index - 1; i >= 0; i--) {
-        if (messages[i].role === "user") {
-          userIndex = i;
-          break;
-        }
+      // The UI passes an index relative to visibleMessages (a tail slice of messages).
+      // Offset by hiddenMessageCount to get the correct index into the full messages array.
+      const index = visibleIndex + hiddenMessageCount;
+      const userMsg = messages[index];
+      if (userMsg.content === newContent) {
+        setEditingMessageId(null);
+        return;
       }
-    }
 
-    if (userIndex !== -1) {
-      const userMsg = messages[userIndex];
-      const deleteIds = messages.slice(userIndex + 1).map((m) => m.id);
+      const deleteIds = messages.slice(index + 1).map((m) => m.id);
 
       try {
-        await chatEditAndTruncate(userMsg.id, userMsg.content, deleteIds);
-        setMessages((prev) => prev.slice(0, userIndex + 1));
-        await executeLlmResponse(userMsg.content);
+        await chatEditAndTruncate(userMsg.id, newContent, deleteIds);
+        setMessages((prev) => {
+          const updated = [...prev.slice(0, index)];
+          updated.push({
+            ...userMsg,
+            content: newContent,
+          });
+          return updated;
+        });
+        setEditingMessageId(null);
+        await executeLlmResponse(newContent);
       } catch (error) {
         setStatus(String(error));
       }
-    }
-  }
+    },
+    [isSending, isClearing, hiddenMessageCount, messages, executeLlmResponse]
+  );
+
+  const handleRetryMessage = useCallback(
+    async (visibleIndex: number) => {
+      if (isSending || isClearing) return;
+
+      // The UI passes an index relative to visibleMessages (a tail slice of messages).
+      // Offset by hiddenMessageCount to get the correct index into the full messages array.
+      const index = visibleIndex + hiddenMessageCount;
+
+      // Find the user message index
+      let userIndex = -1;
+      if (messages[index].role === "user") {
+        userIndex = index;
+      } else {
+        // Find the last user message before this assistant message
+        for (let i = index - 1; i >= 0; i--) {
+          if (messages[i].role === "user") {
+            userIndex = i;
+            break;
+          }
+        }
+      }
+
+      if (userIndex !== -1) {
+        const userMsg = messages[userIndex];
+        const deleteIds = messages.slice(userIndex + 1).map((m) => m.id);
+
+        try {
+          await chatEditAndTruncate(userMsg.id, userMsg.content, deleteIds);
+          setMessages((prev) => prev.slice(0, userIndex + 1));
+          await executeLlmResponse(userMsg.content);
+        } catch (error) {
+          setStatus(String(error));
+        }
+      }
+    },
+    [isSending, isClearing, hiddenMessageCount, messages, executeLlmResponse]
+  );
 
   function toggleDropdown(type: "vault" | "mode" | "model" | "overflow") {
     setActiveDropdown((prev) => (prev === type ? null : type));
