@@ -616,6 +616,24 @@ fn changeset_list_items(
     memory_agent::persistence::list_changeset_items(&conn, &changeset_id)
 }
 
+#[tauri::command]
+fn changeset_commit(
+    input: ipc_types::ChangesetCommitInput,
+    state: tauri::State<'_, AppState>,
+) -> IpcResponse<bool> {
+    let mut conn = match open_connection(&state.db_path) {
+        Ok(c) => c,
+        Err(err) => return IpcResponse::Err { err },
+    };
+    let session_key = redacted::get_session_key(&state);
+    into_ipc(memory_agent::commit_changeset_transaction(
+        &mut conn,
+        &input,
+        &state.db_path,
+        session_key,
+    ))
+}
+
 fn sqlite_db_path<R: tauri::Runtime>(
     app: &tauri::App<R>,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
@@ -701,7 +719,7 @@ pub fn enforce_backup_retention(backups_dir: &Path, max_backups: usize) -> Resul
         if name_str.starts_with("mindvault-pre-") && name_str.ends_with(".db") {
             if let Ok(metadata) = entry.metadata() {
                 if let Ok(modified) = metadata.modified() {
-                    files.push((modified, entry.path()));
+                    files.push((modified, entry.path(), metadata.len()));
                 }
             }
         }
@@ -710,9 +728,26 @@ pub fn enforce_backup_retention(backups_dir: &Path, max_backups: usize) -> Resul
     // Sort descending by modified time (newest first)
     files.sort_by_key(|b| std::cmp::Reverse(b.0));
 
-    if files.len() > max_backups {
-        for (_, path) in files.iter().skip(max_backups) {
+    let max_size = 50 * 1024 * 1024; // 50 MB
+    let mut current_size = 0u64;
+    let mut current_count = 0usize;
+
+    for (index, (_modified, path, size)) in files.iter().enumerate() {
+        if index == 0 {
+            // Always keep at least the newest backup file
+            current_size += size;
+            current_count += 1;
+            continue;
+        }
+
+        let size_exceeded = current_size + size > max_size;
+        let count_exceeded = current_count + 1 > max_backups;
+
+        if size_exceeded || count_exceeded {
             let _ = fs::remove_file(path);
+        } else {
+            current_size += size;
+            current_count += 1;
         }
     }
 
@@ -3403,7 +3438,8 @@ pub fn run() {
             memory_extract_if_ready,
             changeset_count_pending,
             changeset_list_pending,
-            changeset_list_items
+            changeset_list_items,
+            changeset_commit
         ])
         .run(tauri::generate_context!())
         .unwrap_or_else(|err| {

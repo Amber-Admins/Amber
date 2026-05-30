@@ -102,10 +102,39 @@ pub fn list_pending_changesets(
 }
 
 /// Lists all items in a changeset ordered by sort order.
+fn privacy_tier_value(tier: &str) -> i32 {
+    match tier.trim().to_lowercase().as_str() {
+        "open" => 0,
+        "local_only" => 1,
+        "local" => 1,
+        "locked" => 2,
+        "redacted" => 3,
+        _ => 0,
+    }
+}
+
+/// Lists all items in a changeset ordered by sort order.
 pub fn list_changeset_items(
     conn: &Connection,
     changeset_id: &str,
 ) -> Result<Vec<crate::ipc_types::ChangesetItem>, String> {
+    // 1. Resolve source vault sensitivity
+    let source_info: Option<(String, String)> = conn
+        .query_row(
+            "SELECT v.name, v.privacy_tier FROM changesets c
+             JOIN sessions s ON c.session_id = s.id
+             JOIN vaults v ON s.vault_id = v.id
+             WHERE c.id = ?1;",
+            [changeset_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .ok();
+    let (source_vault_name, source_tier) = match source_info {
+        Some((name, tier)) => (Some(name), tier),
+        None => (None, "open".to_string()),
+    };
+    let source_val = privacy_tier_value(&source_tier);
+
     let mut stmt = conn
         .prepare(
             "SELECT id, changeset_id, item_type, target_node_id, proposed_data, existing_data, similarity, merge_with_id, door_id, status, reviewed_at, sort_order
@@ -117,19 +146,72 @@ pub fn list_changeset_items(
 
     let rows = stmt
         .query_map([changeset_id], |row| {
+            let id: String = row.get(0)?;
+            let c_id: String = row.get(1)?;
+            let item_type: String = row.get(2)?;
+            let target_node_id: Option<String> = row.get(3)?;
+            let proposed_data: String = row.get(4)?;
+            let existing_data: Option<String> = row.get(5)?;
+            let similarity: Option<f64> = row.get(6)?;
+            let merge_with_id: Option<String> = row.get(7)?;
+            let door_id: Option<String> = row.get(8)?;
+            let status: String = row.get(9)?;
+            let reviewed_at: Option<String> = row.get(10)?;
+            let sort_order: i64 = row.get(11)?;
+
+            // 2. Parse target vault sensitivity from proposed_data
+            let proposed_json: serde_json::Value = serde_json::from_str(&proposed_data)
+                .unwrap_or_else(|_| serde_json::json!({}));
+            let target_vault_id = proposed_json
+                .get("vaultId")
+                .or_else(|| proposed_json.get("vault_id"))
+                .and_then(|v| v.as_str());
+
+            let target_info: Option<(String, String)> = if let Some(vid) = target_vault_id {
+                conn.query_row(
+                    "SELECT name, privacy_tier FROM vaults WHERE id = ?1 LIMIT 1;",
+                    [vid],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .ok()
+            } else {
+                None
+            };
+            let (target_vault_name, target_tier) = match target_info {
+                Some((name, tier)) => (Some(name), tier),
+                None => (None, "open".to_string()),
+            };
+            let target_val = privacy_tier_value(&target_tier);
+
+            // 3. Compute cross-vault anomaly
+            let cross_vault_anomaly = target_val > source_val;
+            let anomaly_warning = if cross_vault_anomaly {
+                Some(format!(
+                    "Security Warning: Slated for {} ({}) but source conversation was scoped to {} ({}). Review carefully.",
+                    target_vault_name.unwrap_or_else(|| target_vault_id.unwrap_or("target").to_string()),
+                    target_tier.to_uppercase(),
+                    source_vault_name.as_deref().unwrap_or("source"),
+                    source_tier.to_uppercase()
+                ))
+            } else {
+                None
+            };
+
             Ok(crate::ipc_types::ChangesetItem {
-                id: row.get(0)?,
-                changeset_id: row.get(1)?,
-                item_type: row.get(2)?,
-                target_node_id: row.get(3)?,
-                proposed_data: row.get(4)?,
-                existing_data: row.get(5)?,
-                similarity: row.get(6)?,
-                merge_with_id: row.get(7)?,
-                door_id: row.get(8)?,
-                status: row.get(9)?,
-                reviewed_at: row.get(10)?,
-                sort_order: row.get(11)?,
+                id,
+                changeset_id: c_id,
+                item_type,
+                target_node_id,
+                proposed_data,
+                existing_data,
+                similarity,
+                merge_with_id,
+                door_id,
+                status,
+                reviewed_at,
+                sort_order,
+                cross_vault_anomaly,
+                anomaly_warning,
             })
         })
         .map_err(|err| format!("Failed to execute list changeset items query: {err}"))?;
@@ -152,9 +234,18 @@ mod tests {
             Err(e) => panic!("Failed to open in-memory DB: {e}"),
         };
         let ddl = "
-            CREATE TABLE changesets (
+            CREATE TABLE IF NOT EXISTS vaults (
                 id TEXT PRIMARY KEY,
-                session_id TEXT,
+                name TEXT NOT NULL,
+                privacy_tier TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS sessions (
+                id TEXT PRIMARY KEY,
+                vault_id TEXT REFERENCES vaults(id)
+            );
+            CREATE TABLE IF NOT EXISTS changesets (
+                id TEXT PRIMARY KEY,
+                session_id TEXT REFERENCES sessions(id),
                 status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'dismissed', 'partial')),
                 item_count INTEGER NOT NULL DEFAULT 0,
                 accepted_count INTEGER NOT NULL DEFAULT 0,
@@ -163,7 +254,7 @@ mod tests {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 reviewed_at TEXT
             );
-            CREATE TABLE changeset_items (
+            CREATE TABLE IF NOT EXISTS changeset_items (
                 id TEXT PRIMARY KEY,
                 changeset_id TEXT NOT NULL REFERENCES changesets(id) ON DELETE CASCADE,
                 item_type TEXT NOT NULL CHECK (item_type IN ('add', 'update', 'merge', 'delete', 'repoint_door', 'orphan_alert')),
@@ -181,6 +272,15 @@ mod tests {
         if let Err(e) = conn.execute_batch(ddl) {
             panic!("Failed to create DDL: {e}");
         }
+        // Insert dummy vault and session to satisfy foreign key constraints
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO vaults (id, name, privacy_tier) VALUES ('vault-root', 'Vault Root', 'open');",
+            [],
+        );
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO sessions (id, vault_id) VALUES ('session-123', 'vault-root');",
+            [],
+        );
         conn
     }
 
