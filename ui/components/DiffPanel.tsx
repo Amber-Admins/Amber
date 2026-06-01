@@ -515,6 +515,27 @@ export default function DiffPanel({
                           </svg>
                           {new Date(cs.createdAt).toLocaleString()}
                         </div>
+                        {activeTab === "history" && (
+                          <div
+                            className="changeset-card-backup"
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "#bc6c25",
+                              marginTop: "8px",
+                              paddingTop: "8px",
+                              borderTop: "1px dashed rgba(188, 108, 37, 0.12)",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
+                            }}
+                          >
+                            <span>
+                              📂 backups/mindvault-pre-changeset-
+                              {Math.floor(new Date(cs.reviewedAt || cs.createdAt).getTime() / 1000)}
+                              .db
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))
                   )}
