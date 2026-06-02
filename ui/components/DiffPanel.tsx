@@ -79,7 +79,7 @@ export default function DiffPanel({
 
   const handleCommitItem = (
     itemId: string,
-    action: "accept" | "dismiss",
+    action: "accept" | "dismiss" | "edit",
     editedData: unknown | null
   ) => {
     if (!activeChangesetId) return;

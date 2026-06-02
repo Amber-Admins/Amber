@@ -3,7 +3,11 @@ import ItemActions from "./ItemActions";
 
 interface DiffRowProps {
   item: ChangesetItem;
-  onCommitItem: (itemId: string, action: "accept" | "dismiss", editedData: unknown | null) => void;
+  onCommitItem: (
+    itemId: string,
+    action: "accept" | "dismiss" | "edit",
+    editedData: unknown | null
+  ) => void;
 }
 
 interface ProposedData {

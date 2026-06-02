@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 
 interface ItemActionsProps {
   item: ChangesetItem;
-  onCommitItem: (action: "accept" | "dismiss", editedData: unknown | null) => void;
+  onCommitItem: (action: "accept" | "dismiss" | "edit", editedData: unknown | null) => void;
 }
 
 export default function ItemActions({ item, onCommitItem }: ItemActionsProps) {
@@ -69,7 +69,7 @@ export default function ItemActions({ item, onCommitItem }: ItemActionsProps) {
       vaultId: editForm.vaultId.trim() || undefined,
     };
 
-    onCommitItem("accept", updatedData);
+    onCommitItem("edit", updatedData);
     setIsEditing(false);
   };
 
