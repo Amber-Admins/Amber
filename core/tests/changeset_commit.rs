@@ -525,6 +525,47 @@ fn test_enforce_backup_retention_disk_cap() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
+fn test_enforce_backup_retention_contiguous_preservation() -> Result<(), Box<dyn Error>> {
+    let temp_dir = std::env::temp_dir();
+    let test_backups_dir = temp_dir.join(format!(
+        "test_backups_contiguous_{}",
+        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+    ));
+    fs::create_dir_all(&test_backups_dir)?;
+
+    let file_3 = test_backups_dir.join("mindvault-pre-changeset-10.db");
+    fs::write(&file_3, vec![0; 10 * 1024 * 1024])?; // 10 MB (Oldest, would fit under 50MB if skip was allowed)
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let file_2 = test_backups_dir.join("mindvault-pre-changeset-20.db");
+    fs::write(&file_2, vec![0; 30 * 1024 * 1024])?; // 30 MB (Middle)
+
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    let file_1 = test_backups_dir.join("mindvault-pre-changeset-30.db");
+    fs::write(&file_1, vec![0; 30 * 1024 * 1024])?; // 30 MB (Newest)
+
+    // Under the new contiguous policy:
+    // file_1 (30MB) is kept.
+    // file_2 (30MB) exceeds 50MB limit when added to file_1.
+    // Since file_2 exceeds, file_2 AND all subsequent (file_3) are deleted.
+    // Result: only file_1 exists. file_3 is NOT preserved despite being only 10MB!
+    enforce_backup_retention(&test_backups_dir, 10)?;
+
+    assert!(file_1.exists(), "Newest file should be preserved!");
+    assert!(
+        !file_2.exists(),
+        "Middle file should be trimmed due to limit!"
+    );
+    assert!(
+        !file_3.exists(),
+        "Oldest file should be trimmed to maintain a contiguous sequence of recent backups!"
+    );
+
+    let _ = fs::remove_dir_all(&test_backups_dir);
+    Ok(())
+}
+
+#[test]
 fn test_changeset_commit_repoint_door_missing_fields_fail() -> Result<(), Box<dyn Error>> {
     let (mut conn, db_path) = setup_test_db()?;
 

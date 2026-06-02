@@ -851,6 +851,7 @@ pub fn enforce_backup_retention(backups_dir: &Path, max_backups: usize) -> Resul
     let max_size = 50 * 1024 * 1024; // 50 MB
     let mut current_size = 0u64;
     let mut current_count = 0usize;
+    let mut limit_exceeded = false;
 
     for (index, (_modified, path, size)) in files.iter().enumerate() {
         if index == 0 {
@@ -860,10 +861,8 @@ pub fn enforce_backup_retention(backups_dir: &Path, max_backups: usize) -> Resul
             continue;
         }
 
-        let size_exceeded = current_size + size > max_size;
-        let count_exceeded = current_count + 1 > max_backups;
-
-        if size_exceeded || count_exceeded {
+        if limit_exceeded || current_size + size > max_size || current_count + 1 > max_backups {
+            limit_exceeded = true;
             let _ = fs::remove_file(path);
         } else {
             current_size += size;
