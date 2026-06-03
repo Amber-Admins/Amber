@@ -286,6 +286,7 @@ export default function DiffPanel({
     const fetchFriendlyNames = async () => {
       const names: Record<string, string> = {};
       for (const cs of changesets) {
+        if (!active) break;
         try {
           const itemsList = await listChangesetItems(cs.id);
           if (itemsList.length > 0) {
