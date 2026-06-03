@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, type MouseEvent as ReactMouseEvent } from "react";
 import {
   listPendingChangesets,
   listResolvedChangesets,
@@ -133,7 +133,7 @@ export default function DiffPanel({
     }, 250);
   };
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: ReactMouseEvent) => {
     e.preventDefault();
     setIsResizing(true);
   };
