@@ -32,12 +32,26 @@ interface DiffToken {
 }
 
 // Custom Word-Level LCS Diffing Utility
+const diffCache = new Map<string, DiffToken[]>();
+
 function diffWords(oldStr: string, newStr: string): DiffToken[] {
   const cleanOld = oldStr || "";
   const cleanNew = newStr || "";
 
-  if (!cleanOld) return [{ type: "insert", text: cleanNew }];
-  if (!cleanNew) return [{ type: "delete", text: cleanOld }];
+  const cacheKey = `${cleanOld}\0${cleanNew}`;
+  const cached = diffCache.get(cacheKey);
+  if (cached) return cached;
+
+  if (!cleanOld) {
+    const result: DiffToken[] = [{ type: "insert", text: cleanNew }];
+    diffCache.set(cacheKey, result);
+    return result;
+  }
+  if (!cleanNew) {
+    const result: DiffToken[] = [{ type: "delete", text: cleanOld }];
+    diffCache.set(cacheKey, result);
+    return result;
+  }
 
   const oldWords = cleanOld.split(/(\s+)/);
   const newWords = cleanNew.split(/(\s+)/);
@@ -74,7 +88,9 @@ function diffWords(oldStr: string, newStr: string): DiffToken[] {
     }
   }
 
-  return tokens.reverse();
+  const result = tokens.reverse();
+  diffCache.set(cacheKey, result);
+  return result;
 }
 
 export default function DiffRow({ item, onCommitItem }: DiffRowProps) {
