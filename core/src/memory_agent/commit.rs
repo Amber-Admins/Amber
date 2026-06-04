@@ -424,114 +424,125 @@ pub fn commit_changeset_transaction(
                         )?;
                     }
                     "update" => {
-                        if let Some(ref nid) = target_node_id {
-                            update_changeset_node(
-                                &tx,
-                                nid,
-                                vault_id,
-                                title,
-                                summary,
-                                detail,
-                                node_type,
-                                tags.as_ref(),
-                                session_key.as_ref(),
-                            )?;
-                        }
+                        let nid = target_node_id.as_ref().ok_or_else(|| {
+                            format!(
+                                "Missing target_node_id for changeset item '{}' of type 'update'",
+                                item_action.item_id
+                            )
+                        })?;
+                        update_changeset_node(
+                            &tx,
+                            nid,
+                            vault_id,
+                            title,
+                            summary,
+                            detail,
+                            node_type,
+                            tags.as_ref(),
+                            session_key.as_ref(),
+                        )?;
                     }
                     "merge" => {
-                        if let Some(ref mid) = merge_with_id {
-                            // 1. Fetch current node details, tags, and encrypted payload
-                            let (ex_detail, ex_vault_id, mut ex_title, mut ex_summary, ex_node_type, encrypted_payload): (
-                                Option<String>,
-                                String,
-                                String,
-                                String,
-                                String,
-                                Option<String>,
-                            ) = tx
-                                .query_row(
-                                    "SELECT detail, vault_id, title, summary, node_type, encrypted_payload FROM nodes WHERE id = ?1;",
-                                    [mid],
-                                    |row| {
-                                        Ok((
-                                            row.get(0)?,
-                                            row.get(1)?,
-                                            row.get(2)?,
-                                            row.get(3)?,
-                                            row.get(4)?,
-                                            row.get(5)?,
-                                        ))
-                                    },
-                                )
-                                .map_err(|err| format!("Failed fetching node for merge: {err}"))?;
-
-                            let mut decrypted_detail = ex_detail;
-                            if let Some(ref enc_val) = encrypted_payload {
-                                if !enc_val.trim().is_empty() {
-                                    let key =
-                                        session_key.ok_or_else(|| "VAULT_LOCKED".to_string())?;
-                                    let payload: redacted::NodeSecretPayload =
-                                        redacted::decrypt_json(enc_val, &key)?;
-                                    ex_title = payload.title;
-                                    ex_summary = payload.summary;
-                                    decrypted_detail = payload.detail;
-                                }
-                            }
-
-                            // 2. Append details
-                            let mut merged_detail = decrypted_detail.unwrap_or_default();
-                            if let Some(new_det) = detail {
-                                if !new_det.trim().is_empty() {
-                                    if !merged_detail.is_empty() {
-                                        merged_detail.push_str("\n\n");
-                                    }
-                                    merged_detail.push_str(new_det.trim());
-                                }
-                            }
-
-                            // 3. Union tags
-                            let mut merged_tags = HashSet::new();
-                            let mut stmt = tx
-                                .prepare("SELECT t.name FROM node_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.node_id = ?1;")
-                                .map_err(|err| format!("Failed querying current tags: {err}"))?;
-                            let rows = stmt
-                                .query_map([mid], |row| row.get::<_, String>(0))
-                                .map_err(|err| format!("Failed fetching current tags: {err}"))?;
-                            for r in rows.flatten() {
-                                merged_tags.insert(r);
-                            }
-                            if let Some(ref new_tags) = tags {
-                                for t in new_tags {
-                                    merged_tags.insert(t.clone());
-                                }
-                            }
-                            let merged_tags_vec: Vec<String> = merged_tags.into_iter().collect();
-
-                            update_changeset_node(
-                                &tx,
-                                mid,
-                                &ex_vault_id,
-                                &ex_title,
-                                &ex_summary,
-                                if merged_detail.is_empty() {
-                                    None
-                                } else {
-                                    Some(&merged_detail)
+                        let mid = merge_with_id.as_ref().ok_or_else(|| {
+                            format!(
+                                "Missing merge_with_id for changeset item '{}' of type 'merge'",
+                                item_action.item_id
+                            )
+                        })?;
+                        // 1. Fetch current node details, tags, and encrypted payload
+                        let (ex_detail, ex_vault_id, mut ex_title, mut ex_summary, ex_node_type, encrypted_payload): (
+                            Option<String>,
+                            String,
+                            String,
+                            String,
+                            String,
+                            Option<String>,
+                        ) = tx
+                            .query_row(
+                                "SELECT detail, vault_id, title, summary, node_type, encrypted_payload FROM nodes WHERE id = ?1;",
+                                [mid],
+                                |row| {
+                                    Ok((
+                                        row.get(0)?,
+                                        row.get(1)?,
+                                        row.get(2)?,
+                                        row.get(3)?,
+                                        row.get(4)?,
+                                        row.get(5)?,
+                                    ))
                                 },
-                                &ex_node_type,
-                                Some(&merged_tags_vec),
-                                session_key.as_ref(),
-                            )?;
+                            )
+                            .map_err(|err| format!("Failed fetching node for merge: {err}"))?;
+
+                        let mut decrypted_detail = ex_detail;
+                        if let Some(ref enc_val) = encrypted_payload {
+                            if !enc_val.trim().is_empty() {
+                                let key = session_key.ok_or_else(|| "VAULT_LOCKED".to_string())?;
+                                let payload: redacted::NodeSecretPayload =
+                                    redacted::decrypt_json(enc_val, &key)?;
+                                ex_title = payload.title;
+                                ex_summary = payload.summary;
+                                decrypted_detail = payload.detail;
+                            }
                         }
+
+                        // 2. Append details
+                        let mut merged_detail = decrypted_detail.unwrap_or_default();
+                        if let Some(new_det) = detail {
+                            if !new_det.trim().is_empty() {
+                                if !merged_detail.is_empty() {
+                                    merged_detail.push_str("\n\n");
+                                }
+                                merged_detail.push_str(new_det.trim());
+                            }
+                        }
+
+                        // 3. Union tags
+                        let mut merged_tags = HashSet::new();
+                        let mut stmt = tx
+                            .prepare("SELECT t.name FROM node_tags nt JOIN tags t ON nt.tag_id = t.id WHERE nt.node_id = ?1;")
+                            .map_err(|err| format!("Failed querying current tags: {err}"))?;
+                        let rows = stmt
+                            .query_map([mid], |row| row.get::<_, String>(0))
+                            .map_err(|err| format!("Failed fetching current tags: {err}"))?;
+                        for r in rows.flatten() {
+                            merged_tags.insert(r);
+                        }
+                        if let Some(ref new_tags) = tags {
+                            for t in new_tags {
+                                merged_tags.insert(t.clone());
+                            }
+                        }
+                        let merged_tags_vec: Vec<String> = merged_tags.into_iter().collect();
+
+                        update_changeset_node(
+                            &tx,
+                            mid,
+                            &ex_vault_id,
+                            &ex_title,
+                            &ex_summary,
+                            if merged_detail.is_empty() {
+                                None
+                            } else {
+                                Some(&merged_detail)
+                            },
+                            &ex_node_type,
+                            Some(&merged_tags_vec),
+                            session_key.as_ref(),
+                        )?;
                     }
                     "delete" => {
-                        if let Some(ref nid) = target_node_id {
-                            tx.execute(
-                                "UPDATE nodes SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?1;",
-                                [nid],
+                        let nid = target_node_id.as_ref().ok_or_else(|| {
+                            format!(
+                                "Missing target_node_id for changeset item '{}' of type 'delete'",
+                                item_action.item_id
                             )
-                            .map_err(|err| format!("Failed soft deleting node: {err}"))?;
-                        }
+                        })?;
+                        tx.execute(
+                            "UPDATE nodes SET deleted_at = datetime('now'), updated_at = datetime('now') WHERE id = ?1;",
+                            [nid],
+                        )
+                        .map_err(|err| format!("Failed soft deleting node: {err}"))?;
                     }
                     "repoint_door" | "orphan_alert" => {
                         let door_id: Option<String> = tx
@@ -1242,6 +1253,114 @@ mod tests {
         )?;
         assert_eq!(count, 0);
 
+        Ok(())
+    }
+
+    #[test]
+    fn test_commit_update_missing_target_node_id_fails() -> Result<(), Box<dyn Error>> {
+        let mut conn = setup_test_db()?;
+        let db_path = Path::new("test.db");
+
+        conn.execute(
+            "INSERT INTO vaults (id, name, privacy_tier) VALUES ('vault_open', 'Open', 'open');",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO changesets (id, status, item_count) VALUES ('cs_update', 'pending', 1);",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO changeset_items (id, changeset_id, item_type, target_node_id, proposed_data, status)
+             VALUES ('item_update', 'cs_update', 'update', NULL, '{\"title\":\"Title\",\"vaultId\":\"vault_open\"}', 'pending');",
+            [],
+        )?;
+
+        let input = ChangesetCommitInput {
+            changeset_id: "cs_update".to_string(),
+            item_actions: vec![ItemReviewAction {
+                item_id: "item_update".to_string(),
+                action: "accept".to_string(),
+                edited_data: None,
+            }],
+        };
+
+        let result = commit_changeset_transaction(&mut conn, &input, db_path, None);
+        let err_msg = result
+            .err()
+            .ok_or("Expected error due to missing target_node_id")?;
+        assert!(err_msg.contains("Missing target_node_id"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_commit_merge_missing_merge_with_id_fails() -> Result<(), Box<dyn Error>> {
+        let mut conn = setup_test_db()?;
+        let db_path = Path::new("test.db");
+
+        conn.execute(
+            "INSERT INTO vaults (id, name, privacy_tier) VALUES ('vault_open', 'Open', 'open');",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO changesets (id, status, item_count) VALUES ('cs_merge', 'pending', 1);",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO changeset_items (id, changeset_id, item_type, merge_with_id, proposed_data, status)
+             VALUES ('item_merge', 'cs_merge', 'merge', NULL, '{\"title\":\"Title\",\"vaultId\":\"vault_open\"}', 'pending');",
+            [],
+        )?;
+
+        let input = ChangesetCommitInput {
+            changeset_id: "cs_merge".to_string(),
+            item_actions: vec![ItemReviewAction {
+                item_id: "item_merge".to_string(),
+                action: "accept".to_string(),
+                edited_data: None,
+            }],
+        };
+
+        let result = commit_changeset_transaction(&mut conn, &input, db_path, None);
+        let err_msg = result
+            .err()
+            .ok_or("Expected error due to missing merge_with_id")?;
+        assert!(err_msg.contains("Missing merge_with_id"));
+        Ok(())
+    }
+
+    #[test]
+    fn test_commit_delete_missing_target_node_id_fails() -> Result<(), Box<dyn Error>> {
+        let mut conn = setup_test_db()?;
+        let db_path = Path::new("test.db");
+
+        conn.execute(
+            "INSERT INTO vaults (id, name, privacy_tier) VALUES ('vault_open', 'Open', 'open');",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO changesets (id, status, item_count) VALUES ('cs_delete', 'pending', 1);",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO changeset_items (id, changeset_id, item_type, target_node_id, proposed_data, status)
+             VALUES ('item_delete', 'cs_delete', 'delete', NULL, '{\"title\":\"Title\",\"vaultId\":\"vault_open\"}', 'pending');",
+            [],
+        )?;
+
+        let input = ChangesetCommitInput {
+            changeset_id: "cs_delete".to_string(),
+            item_actions: vec![ItemReviewAction {
+                item_id: "item_delete".to_string(),
+                action: "accept".to_string(),
+                edited_data: None,
+            }],
+        };
+
+        let result = commit_changeset_transaction(&mut conn, &input, db_path, None);
+        let err_msg = result
+            .err()
+            .ok_or("Expected error due to missing target_node_id")?;
+        assert!(err_msg.contains("Missing target_node_id"));
         Ok(())
     }
 }
