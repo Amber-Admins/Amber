@@ -140,7 +140,13 @@ pub fn list_changeset_items(
         std::collections::HashMap::new();
     {
         let mut vault_stmt = conn
-            .prepare("SELECT id, name, privacy_tier FROM vaults;")
+            .prepare(
+                "SELECT id, name, privacy_tier FROM vaults
+                 UNION ALL
+                 SELECT sv.id, sv.name, COALESCE(sv.privacy_tier, v.privacy_tier) AS privacy_tier
+                 FROM sub_vaults sv
+                 JOIN vaults v ON sv.vault_id = v.id;",
+            )
             .map_err(|err| format!("Failed to prepare vault preload query: {err}"))?;
         let vault_rows = vault_stmt
             .query_map([], |row| {
@@ -314,6 +320,12 @@ mod tests {
                 name TEXT NOT NULL,
                 privacy_tier TEXT NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS sub_vaults (
+                id TEXT PRIMARY KEY,
+                vault_id TEXT NOT NULL REFERENCES vaults(id),
+                name TEXT NOT NULL,
+                privacy_tier TEXT
+            );
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,
                 vault_id TEXT REFERENCES vaults(id)
@@ -427,6 +439,72 @@ mod tests {
         );
         assert_eq!(items[1].similarity, Some(0.92));
         assert_eq!(items[1].sort_order, 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_sub_vault_privacy_resolution_and_warning() -> Result<(), Box<dyn std::error::Error>> {
+        let conn = setup_test_db();
+
+        // Insert restricted vault and sub-vaults
+        conn.execute(
+            "INSERT INTO vaults (id, name, privacy_tier) VALUES ('vault-restricted', 'Vault Restricted', 'locked');",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO sub_vaults (id, vault_id, name, privacy_tier) VALUES ('sub-null-tier', 'vault-restricted', 'Sub Null Tier', NULL);",
+            [],
+        )?;
+        conn.execute(
+            "INSERT INTO sub_vaults (id, vault_id, name, privacy_tier) VALUES ('sub-open-tier', 'vault-restricted', 'Sub Open Tier', 'open');",
+            [],
+        )?;
+
+        // Prepare a changeset where source is open (from session-123, which is mapped to vault-root with tier open)
+        let pending = PendingChangeset {
+            session_id: "session-123".to_string(),
+            model_used: None,
+            items: vec![
+                PendingChangesetItem {
+                    item_type: ChangesetItemType::Add,
+                    target_node_id: None,
+                    proposed_data:
+                        "{\"title\":\"Targeting sub-null-tier\",\"vaultId\":\"sub-null-tier\"}"
+                            .to_string(),
+                    existing_data: None,
+                    similarity: None,
+                    merge_with_id: None,
+                },
+                PendingChangesetItem {
+                    item_type: ChangesetItemType::Add,
+                    target_node_id: None,
+                    proposed_data:
+                        "{\"title\":\"Targeting sub-open-tier\",\"vaultId\":\"sub-open-tier\"}"
+                            .to_string(),
+                    existing_data: None,
+                    similarity: None,
+                    merge_with_id: None,
+                },
+            ],
+        };
+
+        let cs_id = persist_changeset(&conn, &pending, Some("llama3"))?;
+        let items = list_changeset_items(&conn, &cs_id)?;
+        assert_eq!(items.len(), 2);
+
+        // Item 0 targets sub-null-tier which inherits 'locked' (value 2). Source is 'open' (value 0).
+        // Since 2 > 0, it must trigger a Security Warning.
+        assert!(items[0].anomaly_warning.is_some());
+        let warning_text = items[0]
+            .anomaly_warning
+            .as_ref()
+            .ok_or("Expected anomaly warning to be present")?;
+        assert!(warning_text.contains("Security Warning: Slated for Sub Null Tier (LOCKED)"));
+
+        // Item 1 targets sub-open-tier which overrides parent and has 'open' (value 0). Source is 'open' (value 0).
+        // Since 0 is not > 0, it must NOT trigger a Security Warning.
+        assert!(items[1].anomaly_warning.is_none());
 
         Ok(())
     }
