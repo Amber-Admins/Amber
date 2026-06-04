@@ -33,6 +33,14 @@ interface DiffToken {
 
 // Custom Word-Level LCS Diffing Utility
 const diffCache = new Map<string, DiffToken[]>();
+const MAX_CACHE_SIZE = 1000;
+
+function setCache(key: string, value: DiffToken[]) {
+  if (diffCache.size >= MAX_CACHE_SIZE) {
+    diffCache.clear();
+  }
+  diffCache.set(key, value);
+}
 
 function diffWords(oldStr: string, newStr: string): DiffToken[] {
   const cleanOld = oldStr || "";
@@ -44,12 +52,12 @@ function diffWords(oldStr: string, newStr: string): DiffToken[] {
 
   if (!cleanOld) {
     const result: DiffToken[] = [{ type: "insert", text: cleanNew }];
-    diffCache.set(cacheKey, result);
+    setCache(cacheKey, result);
     return result;
   }
   if (!cleanNew) {
     const result: DiffToken[] = [{ type: "delete", text: cleanOld }];
-    diffCache.set(cacheKey, result);
+    setCache(cacheKey, result);
     return result;
   }
 
@@ -89,7 +97,7 @@ function diffWords(oldStr: string, newStr: string): DiffToken[] {
   }
 
   const result = tokens.reverse();
-  diffCache.set(cacheKey, result);
+  setCache(cacheKey, result);
   return result;
 }
 
