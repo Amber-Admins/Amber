@@ -704,13 +704,18 @@ fn changeset_list_resolved(state: tauri::State<'_, AppState>) -> Result<Vec<Chan
 }
 
 #[tauri::command]
-fn changeset_commit(
+async fn changeset_commit(
     input: ipc_types::ChangesetCommitInput,
     state: tauri::State<'_, AppState>,
 ) -> Result<bool, String> {
-    let mut conn = open_connection(&state.db_path)?;
+    let db_path = state.db_path.clone();
     let session_key = redacted::get_session_key(&state);
-    memory_agent::commit_changeset_transaction(&mut conn, &input, &state.db_path, session_key)
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut conn = open_connection(&db_path)?;
+        memory_agent::commit_changeset_transaction(&mut conn, &input, &db_path, session_key)
+    })
+    .await
+    .map_err(|err| format!("Failed to spawn blocking changeset commit task: {err}"))?
 }
 
 fn sqlite_db_path<R: tauri::Runtime>(
