@@ -1,0 +1,3 @@
+## 2024-06-06 - Dynamic Accessibility Labels in React
+**Learning:** Found a pattern where interactive elements (like the SpatialWorkspace delete buttons) use a two-step confirm process managed entirely via local React state without text labels. If aria-labels don't adapt to the current UI state, screen readers will hear "Delete" even when the visual UI says "Confirm?".
+**Action:** Always bind `aria-label`s to the same state variable that drives the text or icon conditional rendering so accessibility state perfectly mirrors visual state.

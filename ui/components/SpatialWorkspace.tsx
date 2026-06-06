@@ -1450,6 +1450,7 @@ export default function SpatialWorkspace({
                         setEditingItemType("vault");
                         setEditValue(vault.name);
                       }}
+                      aria-label={`Edit ${vault.name}`}
                     >
                       ✏️
                     </button>
@@ -1459,6 +1460,11 @@ export default function SpatialWorkspace({
                     className={`spatial-card-action-btn ${deleteArmedId === vault.id ? "delete-armed" : ""}`}
                     onClick={(e) => handleArmDelete(e, vault.id)}
                     title="Click twice to delete vault card"
+                    aria-label={
+                      deleteArmedId === vault.id
+                        ? `Confirm delete ${vault.name}`
+                        : `Delete ${vault.name}`
+                    }
                   >
                     {deleteArmedId === vault.id ? "Confirm?" : "🗑️"}
                   </button>
@@ -1575,6 +1581,7 @@ export default function SpatialWorkspace({
                               setEditingItemType("node");
                               setEditValue(node.title);
                             }}
+                            aria-label={`Edit ${node.title}`}
                           >
                             ✏️
                           </button>
@@ -1586,6 +1593,11 @@ export default function SpatialWorkspace({
                               e.stopPropagation();
                               handleArmDelete(e, node.id);
                             }}
+                            aria-label={
+                              deleteArmedId === node.id
+                                ? `Confirm delete ${node.title}`
+                                : `Delete ${node.title}`
+                            }
                           >
                             {deleteArmedId === node.id ? "Ok?" : "🗑️"}
                           </button>
@@ -1657,6 +1669,7 @@ export default function SpatialWorkspace({
                               setEditingItemType("subvault");
                               setEditValue(subvault.name);
                             }}
+                            aria-label={`Edit ${subvault.name}`}
                           >
                             ✏️
                           </button>
@@ -1668,6 +1681,11 @@ export default function SpatialWorkspace({
                               e.stopPropagation();
                               handleArmDelete(e, subvault.id);
                             }}
+                            aria-label={
+                              deleteArmedId === subvault.id
+                                ? `Confirm delete ${subvault.name}`
+                                : `Delete ${subvault.name}`
+                            }
                           >
                             {deleteArmedId === subvault.id ? "Ok?" : "🗑️"}
                           </button>
@@ -1753,6 +1771,7 @@ export default function SpatialWorkspace({
                                     setEditingItemType("node");
                                     setEditValue(node.title);
                                   }}
+                                  aria-label={`Edit ${node.title}`}
                                 >
                                   ✏️
                                 </button>
@@ -1764,6 +1783,11 @@ export default function SpatialWorkspace({
                                     e.stopPropagation();
                                     handleArmDelete(e, node.id);
                                   }}
+                                  aria-label={
+                                    deleteArmedId === node.id
+                                      ? `Confirm delete ${node.title}`
+                                      : `Delete ${node.title}`
+                                  }
                                 >
                                   {deleteArmedId === node.id ? "Ok?" : "🗑️"}
                                 </button>

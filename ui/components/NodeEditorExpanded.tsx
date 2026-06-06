@@ -944,6 +944,7 @@ export default function NodeEditorExpanded({
                           ? "Unfreeze — auto-optimize priority"
                           : "Freeze — protect from auto-optimize"
                       }
+                      aria-label={editFrozen ? "Unfreeze priority" : "Freeze priority"}
                     >
                       ❄️
                     </button>
