@@ -665,15 +665,8 @@ function VaultSidebar({
   // ---------------------------------------------------------------------------
   // Build structured tree data with search-match metadata
   // ---------------------------------------------------------------------------
-  const {
-    topLevelVaults,
-    childrenByParent,
-    nodesByVaultId,
-    matchingVaultIds,
-    matchingSubVaultIds,
-    matchingNodeIds,
-    resultCount,
-  } = useMemo(() => {
+  // ⚡ Bolt: Split tree building from search filtering to avoid rebuilding the tree on every keystroke
+  const { topLevelVaults, childrenByParent, nodesByVaultId } = useMemo(() => {
     const childMap = new Map<string, Vault[]>();
     for (const vault of vaults) {
       if (!vault.parentVaultId) {
@@ -701,12 +694,18 @@ function VaultSidebar({
       nodeMap.set(parentKey, existing);
     }
 
+    return {
+      topLevelVaults: roots,
+      childrenByParent: childMap,
+      nodesByVaultId: nodeMap,
+    };
+  }, [allNodes, vaults]);
+
+  // ⚡ Bolt: Isolated search filtering into its own useMemo and replaced O(N) array.find() with O(1) hash map lookup
+  const { matchingVaultIds, matchingSubVaultIds, matchingNodeIds, resultCount } = useMemo(() => {
     // Without a search query, show everything normally
     if (!normalizedQuery) {
       return {
-        topLevelVaults: roots,
-        childrenByParent: childMap,
-        nodesByVaultId: nodeMap,
         matchingVaultIds: new Set<string>(),
         matchingSubVaultIds: new Set<string>(),
         matchingNodeIds: new Set<string>(),
@@ -731,7 +730,7 @@ function VaultSidebar({
         if (node.subVaultId) {
           matchSubVaults.add(node.subVaultId);
           // Also find the root vault for this sub-vault
-          const subVault = vaults.find((v) => v.id === node.subVaultId);
+          const subVault = vaultById[node.subVaultId];
           if (subVault?.parentVaultId) {
             matchVaults.add(subVault.parentVaultId);
           }
@@ -754,15 +753,12 @@ function VaultSidebar({
     }
 
     return {
-      topLevelVaults: roots,
-      childrenByParent: childMap,
-      nodesByVaultId: nodeMap,
       matchingVaultIds: matchVaults,
       matchingSubVaultIds: matchSubVaults,
       matchingNodeIds: matchNodes,
       resultCount: count,
     };
-  }, [allNodes, normalizedQuery, vaults]);
+  }, [allNodes, normalizedQuery, vaults, vaultById]);
 
   // ---------------------------------------------------------------------------
   // Helpers for determining match/dim state

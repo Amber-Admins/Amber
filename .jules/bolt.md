@@ -1,0 +1,3 @@
+## 2024-06-06 - VaultSidebar.tsx Tree Building and Search O(N*V) Bottleneck
+**Learning:** React `useMemo` blocks handling dual responsibilities (e.g. static tree grouping + dynamic search filtering) force expensive tree-rebuilding on every keystroke. Furthermore, using `array.find()` inside a search loop creates an O(N * V) complexity trap that drastically degrades typing performance in large vaults.
+**Action:** Always split large `useMemo` blocks by caching frequency (e.g., separate tree-shaping from search-filtering). Ensure lookups inside search loops utilize pre-computed hash maps (like `vaultById`) instead of linear array scans to maintain O(1) time complexity per node.
