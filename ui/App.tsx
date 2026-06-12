@@ -534,6 +534,7 @@ function App() {
                     inset: 0,
                     display: viewMode === "chat" ? "flex" : "none",
                     flexDirection: "column",
+                    alignItems: "center",
                     pointerEvents: viewMode === "chat" ? "auto" : "none",
                     overflow: "hidden",
                   }}

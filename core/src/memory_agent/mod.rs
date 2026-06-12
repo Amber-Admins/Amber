@@ -1,13 +1,14 @@
 pub mod changeset;
 pub mod commit;
+pub mod correction;
 pub mod parser;
 pub mod persistence;
 pub mod prompt;
 pub mod similarity;
 pub mod trigger;
-
 pub use changeset::{build_changeset, ChangesetItemType, PendingChangeset, PendingChangesetItem};
 pub use commit::commit_changeset_transaction;
+pub use correction::{detect_correction_signal, has_correction_signal, CorrectionSignal};
 pub use parser::{
     parse_candidates_from_llm_output, parse_candidates_json, CandidateAction, CandidateNode,
 };
