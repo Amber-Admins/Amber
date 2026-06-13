@@ -412,6 +412,7 @@ pub async fn execute_memory_extraction_pipeline(
     endpoint: String,
     model: String,
     db_path: PathBuf,
+    is_correction: Option<bool>,
 ) -> Result<Changeset, String> {
     // 1. Load and filter chat history synchronously within scoped block to drop connection before await
     let chat_history = {
@@ -593,17 +594,35 @@ pub async fn execute_memory_extraction_pipeline(
     // 7. Reuse a single connection for changeset build, persist, and retrieval
     let mut conn = open_connection(&db_path)?;
 
-    let changeset_id = {
+    let changeset_id: String = if is_correction.unwrap_or(false) {
+        let correction_signal = {
+            let latest = chat_history.last().map(|m| m.content.as_str());
+            let previous = chat_history
+                .len()
+                .checked_sub(2)
+                .map(|i| chat_history[i].content.as_str());
+            memory_agent::correction::detect_correction_signal(latest.unwrap_or(""), previous, &[])
+                .unwrap_or(memory_agent::correction::CorrectionSignal::ExplicitPhrase {
+                    phrase: "correction".to_string(),
+                })
+        };
+
+        let (id, _amended) = memory_agent::ammendment::amend_or_create_changeset(
+            &mut conn,
+            &candidates,
+            "default-session",
+            &model,
+            &correction_signal,
+        )?;
+        id
+    } else {
         let tx = conn
             .transaction()
             .map_err(|err| format!("Failed to start transaction: {err}"))?;
-
         let pending_changeset =
             memory_agent::changeset::build_changeset(&tx, &candidates, "default-session")?;
-
         let persisted_id =
             memory_agent::persistence::persist_changeset(&tx, &pending_changeset, Some(&model))?;
-
         tx.commit()
             .map_err(|err| format!("Failed to commit transaction: {err}"))?;
         persisted_id
@@ -627,7 +646,7 @@ async fn memory_extract(
 
     // 2. Execute shared pipeline
     let db_path = state.db_path.clone();
-    execute_memory_extraction_pipeline(provider, endpoint, model, db_path).await
+    execute_memory_extraction_pipeline(provider, endpoint, model, db_path, None).await
 }
 
 fn fetch_latest_user_message(
@@ -696,7 +715,7 @@ async fn memory_extract_if_ready(
     // 5. Execute shared pipeline (capture result without early-returning on error,
     //    so we always mark the extraction as attempted and respect cooldown windows)
     let pipeline_result =
-        execute_memory_extraction_pipeline(provider, endpoint, model, db_path.clone()).await;
+        execute_memory_extraction_pipeline(provider, endpoint, model, db_path.clone(), None).await;
 
     // 6. Mark extraction complete/attempted *before* propagating any error,
     //    so that should_extract respects the 6-message and 2-minute cooldown
