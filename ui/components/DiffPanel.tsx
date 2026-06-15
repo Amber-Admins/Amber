@@ -590,9 +590,6 @@ export default function DiffPanel({
                       {/* Detailed diff cards will render here in Commit 4. 
                           For Commit 3, we render a highly polished list summary with type badges. */}
                       {filteredItems.map((item) => {
-                        const parsedData = parseJSON(item.proposedData);
-                        const itemIsAmended = parsedData._amended != null;
-                        const itemAmendedAt = itemIsAmended ? parsedData._amended.at : null;
                         return (
                           <div
                             key={item.id}
@@ -603,14 +600,6 @@ export default function DiffPanel({
                             }}
                           >
                             <DiffRow item={item} onCommitItem={handleCommitItem} />
-                            {itemIsAmended && (
-                              <span
-                                className="diff-amended-badge"
-                                title={`Amended at ${itemAmendedAt}`}
-                              >
-                                (amended)
-                              </span>
-                            )}
                           </div>
                         );
                       })}
