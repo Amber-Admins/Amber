@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import React, { useState } from "react";
+import { createPortal } from "react-dom";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
@@ -178,6 +179,7 @@ function WikiLinkBadge({
 }) {
   const existingNodeIds = React.useContext(ExistingNodesContext);
   const [fetchedExists, setFetchedExists] = React.useState<boolean | null>(null);
+  const [modal, setModal] = React.useState<{ title: string; message: string } | null>(null);
   const isSearchQuery = nodeId.startsWith("search:");
 
   const nodeExists = existingNodeIds ? existingNodeIds.has(nodeId) : fetchedExists;
@@ -215,9 +217,10 @@ function WikiLinkBadge({
     e.stopPropagation();
 
     if (isBroken) {
-      alert(
-        `⚠️ Broken Node Connection\n\nThe node "${children}" no longer exists in your vault.\n\nYou may need to:\n• Remove this link\n• Create a matching node with this title`
-      );
+      setModal({
+        title: "Broken Node Connection",
+        message: `The node "${children}" no longer exists in your vault.\n\nYou may need to:\n• Remove this link\n• Create a matching node with this title`,
+      });
       return;
     }
 
@@ -230,7 +233,10 @@ function WikiLinkBadge({
             if (match) {
               onSelectNode(match.id);
             } else {
-              alert(`⚠️ Node Not Found\n\nNo node with title "${query}" exists in your vault.`);
+              setModal({
+                title: "Node Not Found",
+                message: `No node with title "${query}" exists in your vault.`,
+              });
             }
           })
           .catch((err) => console.error("Failed to query nodes for wikilink:", err));
@@ -241,21 +247,49 @@ function WikiLinkBadge({
   };
 
   return (
-    <button
-      type="button"
-      className={`wikilink-badge ${isBroken ? "broken" : ""} ${isLoading ? "loading" : ""}`}
-      onClick={handleClick}
-      title={
-        isBroken
-          ? `Broken link: Node "${children}" not found`
-          : isSearchQuery
-            ? `Search/Navigate to: ${children}`
-            : `Navigate to: ${children}`
-      }
-      disabled={isLoading}
-    >
-      <span className="wikilink-badge-icon">{isBroken ? "⚠️" : "↗"}</span> {children}
-    </button>
+    <>
+      <button
+        type="button"
+        className={`wikilink-badge ${isBroken ? "broken" : ""} ${isLoading ? "loading" : ""}`}
+        onClick={handleClick}
+        title={
+          isBroken
+            ? `Broken link: Node "${children}" not found`
+            : isSearchQuery
+              ? `Search/Navigate to: ${children}`
+              : `Navigate to: ${children}`
+        }
+        disabled={isLoading}
+      >
+        <span className="wikilink-badge-icon">{isBroken ? "⚠️" : "↗"}</span> {children}
+      </button>
+
+      {modal &&
+        createPortal(
+          <div className="diff-edit-modal-backdrop" onClick={() => setModal(null)}>
+            <div className="diff-edit-modal" onClick={(e) => e.stopPropagation()}>
+              <h3 style={{ margin: "0 0 16px 0", color: "#bc6c25" }}>{modal.title}</h3>
+              <p
+                style={{
+                  margin: "0 0 20px 0",
+                  fontSize: "0.95rem",
+                  color: "#7d7a75",
+                  lineHeight: "1.5",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {modal.message}
+              </p>
+              <div className="edit-modal-actions">
+                <button className="edit-save-btn" onClick={() => setModal(null)}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
+        )}
+    </>
   );
 }
 /**
