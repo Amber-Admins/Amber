@@ -784,8 +784,8 @@ export default function NodeEditorExpanded({
   }, [debouncedPreviewDetail]);
 
   const markdownComponents = React.useMemo(() => {
-    return createMarkdownComponents(chartsEnabled, onSelectNode);
-  }, [chartsEnabled, onSelectNode]);
+    return createMarkdownComponents(chartsEnabled, onSelectNode, isRedactedUnlocked);
+  }, [chartsEnabled, onSelectNode, isRedactedUnlocked]);
 
   const existingNodeIds = React.useMemo(() => {
     return new Set(Object.keys(allNodesMap));

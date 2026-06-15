@@ -1074,6 +1074,7 @@ function NodeEditor({
                   nodeId={node?.id}
                   onRefreshDoors={() => node?.id && refreshDoors(node.id)}
                   existingNodeIds={existingNodeIds}
+                  isRedactedUnlocked={isRedactedUnlocked}
                 />
               )}
               <div className="connections-section">

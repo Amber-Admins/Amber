@@ -27,6 +27,7 @@ type NodeEditorDetailProps = {
   nodeId?: string;
   onRefreshDoors?: () => void;
   existingNodeIds?: Set<string>;
+  isRedactedUnlocked?: boolean;
 };
 
 export default function NodeEditorDetail({
@@ -40,6 +41,7 @@ export default function NodeEditorDetail({
   nodeId,
   onRefreshDoors,
   existingNodeIds,
+  isRedactedUnlocked,
 }: NodeEditorDetailProps) {
   const storeChartsEnabled = useUIStore((state) => state.nodeEditor.chartsEnabled);
   const setNodeEditorChartsEnabled = useUIStore((state) => state.setNodeEditorChartsEnabled);
@@ -166,8 +168,8 @@ export default function NodeEditorDetail({
   }, [debouncedPreviewValue]);
 
   const markdownComponents = React.useMemo(() => {
-    return createMarkdownComponents(chartsEnabled, onSelectNode);
-  }, [chartsEnabled, onSelectNode]);
+    return createMarkdownComponents(chartsEnabled, onSelectNode, isRedactedUnlocked);
+  }, [chartsEnabled, onSelectNode, isRedactedUnlocked]);
 
   return (
     <div className="node-editor-detail-container">

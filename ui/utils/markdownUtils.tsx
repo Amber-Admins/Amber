@@ -172,10 +172,12 @@ function WikiLinkBadge({
   nodeId,
   children,
   onSelectNode,
+  isRedactedUnlocked,
 }: {
   nodeId: string;
   children: React.ReactNode;
   onSelectNode?: (nodeId: string) => void;
+  isRedactedUnlocked?: boolean;
 }) {
   const existingNodeIds = React.useContext(ExistingNodesContext);
   const [fetchedExists, setFetchedExists] = React.useState<boolean | null>(null);
@@ -194,7 +196,7 @@ function WikiLinkBadge({
 
     let isMounted = true;
 
-    getAllNodes()
+    getAllNodes(isRedactedUnlocked)
       .then((nodes) => {
         if (isMounted) {
           const exists = nodes.some((n) => n.id === nodeId);
@@ -210,7 +212,7 @@ function WikiLinkBadge({
     return () => {
       isMounted = false;
     };
-  }, [nodeId, isSearchQuery, existingNodeIds]);
+  }, [nodeId, isSearchQuery, existingNodeIds, isRedactedUnlocked]);
 
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -227,7 +229,7 @@ function WikiLinkBadge({
     if (onSelectNode) {
       if (isSearchQuery) {
         const query = nodeId.substring(7).trim();
-        getAllNodes()
+        getAllNodes(isRedactedUnlocked)
           .then((nodes) => {
             const match = nodes.find((n) => n.title.toLowerCase().trim() === query.toLowerCase());
             if (match) {
@@ -297,7 +299,8 @@ function WikiLinkBadge({
  */
 export function createMarkdownComponents(
   chartsEnabled: boolean,
-  onSelectNode?: (nodeId: string) => void
+  onSelectNode?: (nodeId: string) => void,
+  isRedactedUnlocked?: boolean
 ) {
   return {
     a({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
@@ -310,7 +313,11 @@ export function createMarkdownComponents(
             ?.split(/[?#]/)[0] || "";
         const decodedNodeId = decodeURIComponent(nodeId);
         return (
-          <WikiLinkBadge nodeId={decodedNodeId} onSelectNode={onSelectNode}>
+          <WikiLinkBadge
+            nodeId={decodedNodeId}
+            onSelectNode={onSelectNode}
+            isRedactedUnlocked={isRedactedUnlocked}
+          >
             {children}
           </WikiLinkBadge>
         );

@@ -58,6 +58,7 @@ type ChatMessageBubbleProps = {
   chartsEnabled: boolean;
   onSelectNode?: (nodeId: string) => void;
   existingNodeIds: Set<string> | null;
+  isRedactedUnlocked: boolean;
 };
 
 const ChatMessageBubble = React.memo(function ChatMessageBubble({
@@ -76,6 +77,7 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   chartsEnabled,
   onSelectNode,
   existingNodeIds,
+  isRedactedUnlocked,
 }: ChatMessageBubbleProps) {
   const bubbleContentRef = useRef<HTMLDivElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -91,8 +93,8 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   }, [message.content, message.role, isEditing]);
 
   const markdownComponents = React.useMemo(() => {
-    return createMarkdownComponents(chartsEnabled, onSelectNode);
-  }, [chartsEnabled, onSelectNode]);
+    return createMarkdownComponents(chartsEnabled, onSelectNode, isRedactedUnlocked);
+  }, [chartsEnabled, onSelectNode, isRedactedUnlocked]);
 
   const preprocessedMessage = React.useMemo(() => {
     const wLinks = preprocessWikiLinks(message.content);
@@ -1130,6 +1132,7 @@ function ChatPanel({
               chartsEnabled={chartsEnabled}
               onSelectNode={onSelectNode}
               existingNodeIds={existingNodeIds}
+              isRedactedUnlocked={isRedactedUnlocked}
             />
           ))}
           {isSending && (
