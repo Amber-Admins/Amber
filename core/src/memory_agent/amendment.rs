@@ -126,38 +126,30 @@ pub fn amend_or_create_changeset(
     model: &str,
     correction_signal: &crate::memory_agent::CorrectionSignal,
 ) -> Result<(String, bool), String> {
+    let tx = conn
+        .transaction()
+        .map_err(|err| format!("Failed to start transaction: {err}"))?;
+
     // ── 1. Check for an existing pending changeset ────────────────────────────
-    let existing_changeset = find_pending_changeset(conn, session_id, model)?;
+    let existing_changeset = find_pending_changeset(&tx, session_id, model)?;
 
     // ── 2a. No pending changeset — create a fresh one ────────────────────────
     if existing_changeset.is_none() {
-        let changeset_id = {
-            let tx = conn
-                .transaction()
-                .map_err(|err| format!("Failed to start transaction: {err}"))?;
+        let pending_changeset =
+            memory_agent::changeset::build_changeset(&tx, candidates, session_id)?;
 
-            let pending_changeset =
-                memory_agent::changeset::build_changeset(&tx, candidates, session_id)?;
+        let persisted_id =
+            memory_agent::persistence::persist_changeset(&tx, &pending_changeset, Some(model))?;
 
-            let persisted_id =
-                memory_agent::persistence::persist_changeset(&tx, &pending_changeset, Some(model))?;
+        tx.commit()
+            .map_err(|err| format!("Failed to commit transaction: {err}"))?;
 
-            tx.commit()
-                .map_err(|err| format!("Failed to commit transaction: {err}"))?;
-
-            persisted_id
-        };
-
-        return Ok((changeset_id, false));
+        return Ok((persisted_id, false));
     }
 
     // ── 2b. Pending changeset exists — amend in-place where possible ─────────
     let existing_id =
         existing_changeset.ok_or_else(|| "Pending changeset unexpectedly missing".to_string())?;
-
-    let tx = conn
-        .transaction()
-        .map_err(|err| format!("Failed to start transaction: {err}"))?;
 
     // Load existing items once; all comparisons run against this snapshot.
     let pending_items = load_pending_items(&tx, &existing_id)?;
