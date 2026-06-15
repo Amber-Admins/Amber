@@ -18,6 +18,15 @@ function parseSQLiteDate(dateStr: string | null | undefined): Date {
   return new Date(normalized);
 }
 
+function parseJSON(str: string | null | undefined) {
+  if (!str) return {};
+  try {
+    return JSON.parse(str);
+  } catch {
+    return {};
+  }
+}
+
 interface DiffPanelProps {
   onClose: () => void;
   activeChangesetId: string | null;
@@ -259,15 +268,6 @@ export default function DiffPanel({
     onSelectChangeset(null);
     setSearchQuery("");
     setSelectedCategory(null);
-  };
-
-  // Safe JSON Parsing for proposed/existing data
-  const parseJSON = (str: string) => {
-    try {
-      return JSON.parse(str);
-    } catch {
-      return {};
-    }
   };
 
   // Helper to extract item summary title
