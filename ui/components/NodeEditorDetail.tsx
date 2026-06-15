@@ -8,6 +8,7 @@ import {
   getCaretCoordinates,
   isRawLatex,
   preprocessMathDelimiters,
+  ExistingNodesContext,
 } from "../utils/markdownUtils";
 import NodeLinkAutocomplete from "./NodeLinkAutocomplete";
 import type { Node } from "../types/generated/Node";
@@ -25,6 +26,7 @@ type NodeEditorDetailProps = {
   onSelectNode?: (nodeId: string) => void;
   nodeId?: string;
   onRefreshDoors?: () => void;
+  existingNodeIds?: Set<string>;
 };
 
 export default function NodeEditorDetail({
@@ -37,6 +39,7 @@ export default function NodeEditorDetail({
   onSelectNode,
   nodeId,
   onRefreshDoors,
+  existingNodeIds,
 }: NodeEditorDetailProps) {
   const storeChartsEnabled = useUIStore((state) => state.nodeEditor.chartsEnabled);
   const setNodeEditorChartsEnabled = useUIStore((state) => state.setNodeEditorChartsEnabled);
@@ -269,13 +272,15 @@ export default function NodeEditorDetail({
                 </pre>
               )
             ) : (
-              <ReactMarkdown
-                remarkPlugins={remarkPluginsStable}
-                rehypePlugins={rehypePluginsStable}
-                components={markdownComponents}
-              >
-                {preprocessedMarkdown}
-              </ReactMarkdown>
+              <ExistingNodesContext.Provider value={existingNodeIds ?? null}>
+                <ReactMarkdown
+                  remarkPlugins={remarkPluginsStable}
+                  rehypePlugins={rehypePluginsStable}
+                  components={markdownComponents}
+                >
+                  {preprocessedMarkdown}
+                </ReactMarkdown>
+              </ExistingNodesContext.Provider>
             )}
           </div>
         )}

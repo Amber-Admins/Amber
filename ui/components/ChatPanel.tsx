@@ -13,6 +13,7 @@ import {
   createMarkdownComponents,
   preprocessMathDelimiters,
   preprocessWikiLinks,
+  ExistingNodesContext,
 } from "../utils/markdownUtils";
 import type { ContextAssemblerScope } from "../constants/contextBudget";
 import type { Vault } from "../ipc";
@@ -23,7 +24,7 @@ import {
   chatEditAndTruncate,
   type ChatMessage,
 } from "../services/chat";
-import { chatWithScope } from "../services/nodes";
+import { chatWithScope, getAllNodes } from "../services/nodes";
 import { getSetting } from "../services/settings";
 import { listVaults } from "../services/vaults";
 import { extractMemoryIfReady, extractMemoryForce } from "../services/memoryAgent";
@@ -56,6 +57,7 @@ type ChatMessageBubbleProps = {
   onStartEdit: (messageId: string, content: string) => void;
   chartsEnabled: boolean;
   onSelectNode?: (nodeId: string) => void;
+  existingNodeIds: Set<string> | null;
 };
 
 const ChatMessageBubble = React.memo(function ChatMessageBubble({
@@ -73,6 +75,7 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
   onStartEdit,
   chartsEnabled,
   onSelectNode,
+  existingNodeIds,
 }: ChatMessageBubbleProps) {
   const bubbleContentRef = useRef<HTMLDivElement>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -135,13 +138,15 @@ const ChatMessageBubble = React.memo(function ChatMessageBubble({
                   message.role === "user" && isOverflowing && isCollapsed ? "collapsed" : ""
                 }`}
               >
-                <ReactMarkdown
-                  remarkPlugins={remarkPluginsStable}
-                  rehypePlugins={rehypePluginsStable}
-                  components={markdownComponents}
-                >
-                  {preprocessedMessage}
-                </ReactMarkdown>
+                <ExistingNodesContext.Provider value={existingNodeIds}>
+                  <ReactMarkdown
+                    remarkPlugins={remarkPluginsStable}
+                    rehypePlugins={rehypePluginsStable}
+                    components={markdownComponents}
+                  >
+                    {preprocessedMessage}
+                  </ReactMarkdown>
+                </ExistingNodesContext.Provider>
               </div>
               {message.role === "user" && isOverflowing && (
                 <button
@@ -327,6 +332,7 @@ type ChatPanelProps = {
   onSelectNode?: (nodeId: string) => void;
   onRefreshPendingCount?: () => void;
   isRedactedUnlocked: boolean;
+  nodeRefreshKey?: number;
 };
 
 function ChatPanel({
@@ -339,6 +345,7 @@ function ChatPanel({
   onSelectNode,
   onRefreshPendingCount,
   isRedactedUnlocked,
+  nodeRefreshKey,
 }: ChatPanelProps) {
   const MAX_RENDERED_MESSAGES = 60;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -349,6 +356,23 @@ function ChatPanel({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
+  const [existingNodeIds, setExistingNodeIds] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getAllNodes()
+      .then((nodes) => {
+        if (active) {
+          setExistingNodeIds(new Set(nodes.map((n) => n.id)));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch nodes in ChatPanel:", err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [nodeRefreshKey]);
 
   const [userName, setUserName] = useState("Lisa");
   const [vaults, setVaults] = useState<Vault[]>([]);
@@ -1105,6 +1129,7 @@ function ChatPanel({
               onStartEdit={handleStartEdit}
               chartsEnabled={chartsEnabled}
               onSelectNode={onSelectNode}
+              existingNodeIds={existingNodeIds}
             />
           ))}
           {isSending && (

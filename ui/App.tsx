@@ -562,6 +562,7 @@ function App() {
                     isRedactedUnlocked={isRedactedUnlocked}
                     onModalToggle={setChatModalOpen}
                     onSelectNode={onSelectNode}
+                    nodeRefreshKey={nodeRefreshKey}
                     onRefreshPendingCount={() => {
                       void countPendingChangesetItems()
                         .then(setPendingProposalCount)
