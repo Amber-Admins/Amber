@@ -274,7 +274,7 @@ export default function NodeEditorDetail({
                 </pre>
               )
             ) : (
-              <ExistingNodesContext.Provider value={existingNodeIds ?? null}>
+              <ExistingNodesContext.Provider value={existingNodeIds}>
                 <ReactMarkdown
                   remarkPlugins={remarkPluginsStable}
                   rehypePlugins={rehypePluginsStable}
