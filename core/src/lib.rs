@@ -675,7 +675,7 @@ fn fetch_latest_user_message(
     conn.query_row(
         "SELECT content FROM session_messages
          WHERE session_id = ?1 AND role = 'user'
-         ORDER BY created_at DESC, id DESC
+         ORDER BY created_at DESC, rowid DESC
          LIMIT 1;",
         [session_id],
         |row| row.get(0),
