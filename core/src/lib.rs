@@ -3639,10 +3639,10 @@ pub async fn test_helper_memory_extract_force(
 ) -> Result<ipc_types::Changeset, String> {
     use tauri::Manager;
     let app = tauri::test::mock_app();
-    app.manage(DbState {
+    app.manage(AppState {
         db_path,
         redacted_session_key: std::sync::Mutex::new(None),
     });
-    let state = app.state::<DbState>();
+    let state = app.state::<AppState>();
     memory_extract_force(provider, endpoint, model, state).await
 }
