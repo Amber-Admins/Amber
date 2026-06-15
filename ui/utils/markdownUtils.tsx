@@ -184,6 +184,22 @@ function WikiLinkBadge({
   const [modal, setModal] = React.useState<{ title: string; message: string } | null>(null);
   const isSearchQuery = nodeId.startsWith("search:");
 
+  // Extract a clean string representation of children for string templates (alert messages & tooltips)
+  const labelText = React.useMemo(() => {
+    if (typeof children === "string") return children;
+    if (typeof children === "number") return String(children);
+    const extractString = (node: React.ReactNode): string => {
+      if (!node) return "";
+      if (typeof node === "string" || typeof node === "number") return String(node);
+      if (Array.isArray(node)) return node.map(extractString).join("");
+      if (React.isValidElement(node)) {
+        return extractString((node.props as { children?: React.ReactNode }).children);
+      }
+      return "";
+    };
+    return extractString(children);
+  }, [children]);
+
   const nodeExists = existingNodeIds ? existingNodeIds.has(nodeId) : fetchedExists;
   const isBroken = !isSearchQuery && nodeExists === false;
   const isLoading = nodeExists === null && !isSearchQuery;
@@ -221,7 +237,7 @@ function WikiLinkBadge({
     if (isBroken) {
       setModal({
         title: "Broken Node Connection",
-        message: `The node "${children}" no longer exists in your vault.\n\nYou may need to:\n• Remove this link\n• Create a matching node with this title`,
+        message: `The node "${labelText}" no longer exists in your vault.\n\nYou may need to:\n• Remove this link\n• Create a matching node with this title`,
       });
       return;
     }
@@ -256,10 +272,10 @@ function WikiLinkBadge({
         onClick={handleClick}
         title={
           isBroken
-            ? `Broken link: Node "${children}" not found`
+            ? `Broken link: Node "${labelText}" not found`
             : isSearchQuery
-              ? `Search/Navigate to: ${children}`
-              : `Navigate to: ${children}`
+              ? `Search/Navigate to: ${labelText}`
+              : `Navigate to: ${labelText}`
         }
         disabled={isLoading}
       >
