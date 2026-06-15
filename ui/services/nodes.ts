@@ -46,6 +46,7 @@ export async function getNodes(isRedactedUnlocked?: boolean): Promise<Node[]> {
     if (pendingNodesPromise) {
       return pendingNodesPromise;
     }
+    clearNodesCache();
     const promise = unwrapIpcResult(nodeList()).finally(() => {
       if (pendingNodesPromise === promise) {
         pendingNodesPromise = null;
