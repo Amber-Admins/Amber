@@ -253,8 +253,7 @@ pub fn amend_or_create_changeset(
                  SET proposed_data = ?1,
                      similarity    = ?2,
                      item_type     = ?3,
-                     reviewed_at   = NULL,
-                     sort_order    = sort_order
+                     reviewed_at   = NULL
                  WHERE id = ?4",
                 params![proposed_json, similarity, item_type, matched_id],
             )
