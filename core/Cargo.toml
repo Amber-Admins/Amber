@@ -34,3 +34,5 @@ async-trait = "0.1"
 tiktoken-rs = "0.5"
 rfd = "0.15"
 governor = "0.6"
+chrono = { version = "0.4", features = ["serde"] }
+
