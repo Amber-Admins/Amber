@@ -601,10 +601,23 @@ pub async fn execute_memory_extraction_pipeline(
                 .len()
                 .checked_sub(2)
                 .map(|i| chat_history[i].content.as_str());
-            memory_agent::correction::detect_correction_signal(latest.unwrap_or(""), previous, &[])
-                .unwrap_or(memory_agent::correction::CorrectionSignal::ExplicitPhrase {
-                    phrase: "correction".to_string(),
-                })
+
+            let pending_data: Vec<String> = conn
+                .prepare("SELECT proposed_data FROM changeset_items WHERE status = 'pending';")
+                .map_err(|err| format!("Failed preparing pending changeset query: {err}"))?
+                .query_map([], |row| row.get(0))
+                .map_err(|err| format!("Failed querying pending changeset items: {err}"))?
+                .collect::<Result<Vec<String>, _>>()
+                .map_err(|err| format!("Failed reading pending changeset row: {err}"))?;
+
+            memory_agent::correction::detect_correction_signal(
+                latest.unwrap_or(""),
+                previous,
+                &pending_data,
+            )
+            .unwrap_or(memory_agent::correction::CorrectionSignal::ExplicitPhrase {
+                phrase: "correction".to_string(),
+            })
         };
 
         let (id, _amended) = memory_agent::amendment::amend_or_create_changeset(
