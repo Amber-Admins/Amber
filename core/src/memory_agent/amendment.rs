@@ -67,25 +67,6 @@ fn is_leap(year: u64) -> bool {
     year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)
 }
 
-/// Computes Jaccard similarity between two strings at the whitespace-token level.
-fn jaccard_similarity(a: &str, b: &str) -> f64 {
-    let set_a: std::collections::HashSet<&str> = a.split_whitespace().collect();
-    let set_b: std::collections::HashSet<&str> = b.split_whitespace().collect();
-
-    if set_a.is_empty() && set_b.is_empty() {
-        return 1.0;
-    }
-
-    let intersection = set_a.intersection(&set_b).count();
-    let union = set_a.union(&set_b).count();
-
-    if union == 0 {
-        0.0
-    } else {
-        intersection as f64 / union as f64
-    }
-}
-
 /// Extracts a lowercase `"title summary"` string from a proposed_data JSON value
 /// for use as the Jaccard comparison fingerprint.
 fn candidate_fingerprint(proposed_data: &serde_json::Value) -> String {
@@ -275,7 +256,7 @@ pub fn amend_or_create_changeset(
             .iter()
             .map(|(item_id, existing_data)| {
                 let existing_fp = candidate_fingerprint(existing_data);
-                let sim = jaccard_similarity(&candidate_fp, &existing_fp);
+                let sim = memory_agent::jaccard_similarity(&candidate_fp, &existing_fp);
                 (item_id, sim)
             })
             .filter(|(_, sim)| *sim > 0.5)
