@@ -423,7 +423,7 @@ pub async fn execute_memory_extraction_pipeline(
                 "SELECT id, role, content, node_refs, created_at
                  FROM session_messages
                  WHERE session_id = 'default-session'
-                 ORDER BY created_at ASC, id ASC;",
+                 ORDER BY created_at ASC, rowid ASC;",
             )
             .map_err(|err| format!("Failed preparing session_messages query: {err}"))?;
 
