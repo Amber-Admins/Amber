@@ -415,11 +415,11 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
   }
 
   async function goNext() {
-    if (currentStep === 2) {
+    if (isLastStep) {
       await commitOnboardingAndFinish();
       return;
     }
-    if (currentStep === 1 && !hasExtracted) {
+    if (currentStep === STEPS.length - 2 && !hasExtracted) {
       const ok = await runExtractionOnce();
       if (!ok) {
         return;
