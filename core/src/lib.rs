@@ -11,6 +11,7 @@ use tauri::Manager;
 
 mod auth;
 mod chat;
+pub mod embed;
 pub mod ipc_types;
 pub mod llm;
 pub mod memory_agent;
