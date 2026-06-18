@@ -27,6 +27,18 @@ export type ChatMessage = {
   created_at: string;
   isStreaming?: boolean;
 };
+export type ChatSession = {
+  id: string;
+  vaultId: string | null;
+  startedAt: string;
+  summary: string | null;
+};
+export type ChatConversionResult = {
+  sessionId: string;
+  summary: string | null;
+  changeset: Changeset | null;
+  extractionError: string | null;
+};
 export type {
   Backlink,
   Changeset,
@@ -377,13 +389,31 @@ export function chatIsOffTheRecord() {
 export function chatConvertTemporaryToMemory(
   provider: string,
   endpoint: string,
-  model: string
-): Promise<IpcResult<Changeset>> {
-  return invoke<Changeset>("chat_convert_temporary_to_memory", {
+  model: string,
+  targetSessionId?: string | null
+): Promise<IpcResult<ChatConversionResult>> {
+  return invoke<ChatConversionResult>("chat_convert_temporary_to_memory", {
     provider,
     endpoint,
     model,
+    targetSessionId,
   })
-    .then((ok) => ({ ok }) as IpcResult<Changeset>)
-    .catch((error) => ({ err: String(error) }) as IpcResult<Changeset>);
+    .then((ok) => ({ ok }) as IpcResult<ChatConversionResult>)
+    .catch((error) => ({ err: String(error) }) as IpcResult<ChatConversionResult>);
+}
+
+export function chatListSessions() {
+  return invokeTyped<ChatSession[]>("chat_list_sessions");
+}
+
+export function chatCreateSession(id: string, summary?: string) {
+  return invokeTyped<void>("chat_create_session", { id, summary });
+}
+
+export function chatDeleteSession(id: string) {
+  return invokeTyped<void>("chat_delete_session", { id });
+}
+
+export function chatUpdateSessionSummary(id: string, summary: string) {
+  return invokeTyped<void>("chat_update_session_summary", { id, summary });
 }

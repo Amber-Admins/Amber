@@ -1178,22 +1178,6 @@
   border-color: var(--primary-color);
 }
 
-/* Dropdowns inside compact pills open upward (bottom of screen) */
-.zen-pills-row.compact .zen-dropdown {
-  top: auto;
-  bottom: calc(100% + 8px);
-  left: 0;
-  right: auto;
-  transform: none;
-  animation: slideUpDropdown 200ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.zen-pills-row.compact .zen-dropdown.overflow-dropdown {
-  left: auto;
-  right: 0;
-  transform: none;
-}
-
 @keyframes slideUpDropdown {
   from {
     opacity: 0;
@@ -1206,73 +1190,14 @@
   }
 }
 
-/* Triple Dot Overflow More Pill */
-.zen-pill-container.overflow-container {
-  margin-left: auto;
-}
-
-.compact-pill-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  border: 1px solid rgba(188, 108, 37, 0.12);
-  background: rgba(253, 252, 250, 0.72);
-  color: #7d7a75;
-  cursor: pointer;
-  transition: all 180ms ease;
-  font-size: 0.8rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-.compact-pill-more:hover,
-.compact-pill-more.active {
-  background: #ffffff;
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-  transform: translateY(-0.5px);
-}
-
-/* Right-aligned overflow dropdown (base — used on landing) */
-.zen-dropdown.overflow-dropdown {
-  right: 0;
-  left: auto;
+/* Dropdowns inside compact pills open upward (bottom of screen) */
+.zen-pills-row.compact .zen-dropdown {
+  top: auto;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: auto;
   transform: none;
-  top: calc(100% + 4px);
-  min-width: 200px;
-  box-shadow: 0 8px 24px rgba(188, 108, 37, 0.12);
-  animation: slideDownDropdown 180ms cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes slideDownDropdown {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.zen-dropdown-item.danger-item {
-  color: #c53030;
-}
-
-.zen-dropdown-item.danger-item:hover {
-  background: rgba(197, 48, 48, 0.08);
-}
-
-.zen-dropdown-item.new-chat-item {
-  color: var(--primary-color);
-}
-
-.zen-dropdown-item.new-chat-item:hover {
-  background: rgba(188, 108, 37, 0.07);
+  animation: slideUpDropdown 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Custom premium code block elements inside assistant chat bubbles */
@@ -2252,6 +2177,21 @@
 .extract-pill.active {
   background: rgba(123, 97, 255, 0.12);
   border-color: rgba(123, 97, 255, 0.45);
+}
+
+.charts-pill.active {
+  background: rgba(37, 99, 235, 0.08) !important;
+  border-color: rgba(37, 99, 235, 0.3) !important;
+  color: #1d4ed8 !important;
+}
+
+.charts-pill.active .zen-pill-value {
+  color: #1d4ed8 !important;
+}
+
+.charts-pill.active:hover {
+  background: rgba(37, 99, 235, 0.12) !important;
+  border-color: rgba(37, 99, 235, 0.45) !important;
 }
 
 .otr-toggle-btn {

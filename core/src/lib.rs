@@ -1332,14 +1332,7 @@ pub fn run() {
                     }
                 }
             });
-            let retention: String = conn
-                .query_row(
-                    "SELECT value FROM settings WHERE key = 'temporary_session_retention' LIMIT 1;",
-                    [],
-                    |row| row.get(0),
-                )
-                .unwrap_or_else(|_| "immediate".to_string());
-            chat::purge_temporary_session_with_retention(&conn, &retention)?;
+            chat::purge_temporary_session(&conn)?;
             Ok(())
         })
         .plugin(tauri_plugin_opener::init())
@@ -1355,6 +1348,10 @@ pub fn run() {
             chat_set_off_the_record,
             chat_is_off_the_record,
             chat_convert_temporary_to_memory,
+            chat_list_sessions,
+            chat_create_session,
+            chat_delete_session,
+            chat_update_session_summary,
             vault_create,
             vault_list,
             vault_delete,
@@ -2005,6 +2002,46 @@ fn chat_edit_and_truncate(
             format!("Failed committing chat_edit_and_truncate transaction: {err}")
         })?;
         Ok(())
+    })())
+}
+
+#[tauri::command]
+fn chat_list_sessions(state: tauri::State<'_, AppState>) -> IpcResponse<Vec<chat::ChatSession>> {
+    into_ipc((|| {
+        let conn = open_connection(&state.db_path)?;
+        chat::list_sessions(&conn)
+    })())
+}
+
+#[tauri::command]
+fn chat_create_session(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    summary: Option<String>,
+) -> IpcResponse<()> {
+    into_ipc((|| {
+        let conn = open_connection(&state.db_path)?;
+        chat::create_session(&conn, id, summary)
+    })())
+}
+
+#[tauri::command]
+fn chat_delete_session(state: tauri::State<'_, AppState>, id: String) -> IpcResponse<()> {
+    into_ipc((|| {
+        let conn = open_connection(&state.db_path)?;
+        chat::delete_session(&conn, &id)
+    })())
+}
+
+#[tauri::command]
+fn chat_update_session_summary(
+    state: tauri::State<'_, AppState>,
+    id: String,
+    summary: String,
+) -> IpcResponse<()> {
+    into_ipc((|| {
+        let conn = open_connection(&state.db_path)?;
+        chat::update_session_summary(&conn, &id, &summary)
     })())
 }
 
@@ -3605,17 +3642,27 @@ async fn changeset_commit(
     .map_err(|err| format!("Failed to spawn blocking changeset commit task: {err}"))?
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatConversionResult {
+    session_id: String,
+    summary: Option<String>,
+    changeset: Option<Changeset>,
+    extraction_error: Option<String>,
+}
+
 #[tauri::command]
 async fn chat_convert_temporary_to_memory(
     provider: String,
     endpoint: String,
     model: String,
+    target_session_id: Option<String>,
     state: tauri::State<'_, AppState>,
-) -> Result<Changeset, String> {
+) -> Result<ChatConversionResult, String> {
     let db_path = state.db_path.clone();
     let conn = open_connection(&db_path)?;
 
-    chat::convert_temporary_to_memory(&conn)?;
+    let converted_session = chat::convert_temporary_to_memory(&conn, target_session_id.as_deref())?;
 
     conn.execute(
         "UPDATE settings SET value = 'false', updated_at = datetime('now')
@@ -3626,7 +3673,20 @@ async fn chat_convert_temporary_to_memory(
 
     drop(conn);
 
-    execute_memory_extraction_pipeline(provider, endpoint, model, db_path, None).await
+    match execute_memory_extraction_pipeline(provider, endpoint, model, db_path, None).await {
+        Ok(changeset) => Ok(ChatConversionResult {
+            session_id: converted_session.session_id,
+            summary: converted_session.summary,
+            changeset: Some(changeset),
+            extraction_error: None,
+        }),
+        Err(err) => Ok(ChatConversionResult {
+            session_id: converted_session.session_id,
+            summary: converted_session.summary,
+            changeset: None,
+            extraction_error: Some(err),
+        }),
+    }
 }
 
 /// MARK: Tests

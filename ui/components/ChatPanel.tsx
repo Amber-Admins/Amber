@@ -24,6 +24,7 @@ import {
   chatEditAndTruncate,
   chatSetOffTheRecord,
   chatIsOffTheRecord,
+  chatUpdateSessionSummary,
   type ChatMessage,
 } from "../services/chat";
 import { chatWithScope, getAllNodes } from "../services/nodes";
@@ -38,7 +39,6 @@ import {
   getLlmMode,
   setLlmMode,
   getApiKey,
-  getTemporarySessionRetention,
 } from "../utils/settings";
 import { useUIStore } from "../utils/store";
 import { chatConvertTemporaryToMemory } from "../ipc";
@@ -347,6 +347,8 @@ type ChatPanelProps = {
   isRedactedUnlocked: boolean;
   nodeRefreshKey?: number;
   visible?: boolean;
+  activeSessionId?: string | null;
+  onActivateSession?: (sessionId: string) => void;
 };
 
 function ChatPanel({
@@ -361,43 +363,49 @@ function ChatPanel({
   isRedactedUnlocked,
   nodeRefreshKey,
   visible = true,
+  activeSessionId,
+  onActivateSession,
 }: ChatPanelProps) {
   const [isOffTheRecord, setIsOffTheRecord] = useState(false);
   const MAX_RENDERED_MESSAGES = 60;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [isClearing, setIsClearing] = useState(false);
   const [status, setStatus] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [existingNodeIds, setExistingNodeIds] = useState<Set<string> | null>(null);
 
-  const sessionId = isOffTheRecord ? "temporary-session" : "default-session";
+  const sessionId = isOffTheRecord ? "temporary-session" : activeSessionId || "default-session";
 
   const handleToggleOtr = useCallback(async () => {
     const next = !isOffTheRecord;
-    const nextSessionId = next ? "temporary-session" : "default-session";
+    const nextSessionId = next ? "temporary-session" : activeSessionId || "default-session";
     setIsOffTheRecord(next);
     try {
       await chatSetOffTheRecord(next);
-      // Only clear the temporary session when switching away from it (deactivating OTR) if policy is immediate
       if (sessionId === "temporary-session") {
-        const retention = await getTemporarySessionRetention();
-        if (retention === "immediate") {
-          await clearChatHistory(sessionId);
-        }
+        await clearChatHistory(sessionId);
       }
       const history = await getChatHistory(nextSessionId);
       setMessages(history);
       setInput("");
       setStatus("");
+      window.dispatchEvent(new CustomEvent("mindvault:chat-external-updated"));
     } catch (err) {
       console.error("Failed to toggle off-the-record:", err);
       setIsOffTheRecord(!next); // rollback
     }
-  }, [isOffTheRecord, sessionId, setIsOffTheRecord, setMessages, setInput, setStatus]);
+  }, [
+    isOffTheRecord,
+    sessionId,
+    activeSessionId,
+    setIsOffTheRecord,
+    setMessages,
+    setInput,
+    setStatus,
+  ]);
 
   useEffect(() => {
     if (!visible) return;
@@ -436,9 +444,7 @@ function ChatPanel({
   useEffect(() => {
     onModalToggle?.(showChartsConfirmModal);
   }, [showChartsConfirmModal, onModalToggle]);
-  const [activeDropdown, setActiveDropdown] = useState<
-    "vault" | "mode" | "model" | "overflow" | null
-  >(null);
+  const [activeDropdown, setActiveDropdown] = useState<"vault" | "mode" | "model" | null>(null);
 
   const handleToggleCharts = useCallback(() => {
     if (chartsEnabled) {
@@ -470,17 +476,24 @@ function ChatPanel({
     setIsConverting(true);
     try {
       const { provider, endpoint, model } = await resolveLlmConfig();
-      const result = await chatConvertTemporaryToMemory(provider, endpoint, model);
+      const result = await chatConvertTemporaryToMemory(provider, endpoint, model, activeSessionId);
       if ("err" in result) {
         setStatus(`Conversion failed: ${result.err}`);
         return;
       }
-      // Backend has merged messages and disabled OTR — sync local state
+      const { sessionId: savedSessionId, changeset, extractionError } = result.ok;
+      onActivateSession?.(savedSessionId);
       setIsOffTheRecord(false);
-      const history = await getChatHistory("default-session");
-      setMessages(history);
-      setStatus("");
-      onRefreshPendingCount?.();
+      setInput("");
+      setStatus(
+        extractionError
+          ? `Conversation saved, but memory extraction failed: ${extractionError}`
+          : ""
+      );
+      if (changeset) {
+        onRefreshPendingCount?.();
+      }
+      window.dispatchEvent(new CustomEvent("mindvault:chat-external-updated"));
     } catch (err) {
       console.error("Convert to memory failed:", err);
       setStatus(String(err));
@@ -490,10 +503,12 @@ function ChatPanel({
   }, [
     isConverting,
     isSending,
+    activeSessionId,
+    onActivateSession,
     onRefreshPendingCount,
     setIsConverting,
     setIsOffTheRecord,
-    setMessages,
+    setInput,
     setStatus,
   ]);
 
@@ -503,7 +518,6 @@ function ChatPanel({
   const messagesRef = useRef(messages);
   const hiddenMessageCountRef = useRef(0);
   const isSendingRef = useRef(isSending);
-  const isClearingRef = useRef(isClearing);
   const executeLlmResponseRef = useRef<(prompt: string) => Promise<void>>(async () => {});
 
   useEffect(() => {
@@ -598,6 +612,24 @@ function ChatPanel({
 
   useEffect(() => {
     let active = true;
+    const handleChatExternalUpdated = async () => {
+      try {
+        const offTheRecord = await chatIsOffTheRecord();
+        if (!active) return;
+        setIsOffTheRecord(offTheRecord);
+      } catch (err) {
+        console.error("Failed to fetch off-the-record state on update:", err);
+      }
+    };
+    window.addEventListener("mindvault:chat-external-updated", handleChatExternalUpdated);
+    return () => {
+      active = false;
+      window.removeEventListener("mindvault:chat-external-updated", handleChatExternalUpdated);
+    };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
     void (async () => {
       try {
         const data = await listVaults();
@@ -645,10 +677,7 @@ function ChatPanel({
     };
   }, [sessionId]);
 
-  const canSend = useMemo(
-    () => input.trim().length > 0 && !isSending && !isClearing,
-    [input, isSending, isClearing]
-  );
+  const canSend = useMemo(() => input.trim().length > 0 && !isSending, [input, isSending]);
   const visibleMessages = useMemo(() => {
     if (messages.length <= MAX_RENDERED_MESSAGES) {
       return messages;
@@ -661,7 +690,6 @@ function ChatPanel({
     messagesRef.current = messages;
     hiddenMessageCountRef.current = hiddenMessageCount;
     isSendingRef.current = isSending;
-    isClearingRef.current = isClearing;
   });
 
   const executeLlmResponse = useCallback(
@@ -737,7 +765,7 @@ function ChatPanel({
   }, [executeLlmResponse]);
 
   async function executeSendMessage(promptText: string) {
-    if (isSending || isClearing || !promptText.trim()) return;
+    if (isSending || !promptText.trim()) return;
 
     const userMsgId = crypto.randomUUID();
     const userMsg: ChatMessage = {
@@ -747,10 +775,17 @@ function ChatPanel({
       created_at: new Date().toISOString(),
     };
 
+    const isFirstMessage = messages.length === 0;
+
     setMessages((prev) => [...prev, userMsg]);
 
     try {
       await chatAppendMessage(userMsgId, "user", promptText, sessionId);
+      if (isFirstMessage && sessionId !== "temporary-session") {
+        const summary = promptText.length > 40 ? promptText.substring(0, 40) + "..." : promptText;
+        await chatUpdateSessionSummary(sessionId, summary);
+      }
+      window.dispatchEvent(new CustomEvent("mindvault:chat-external-updated"));
       await executeLlmResponse(promptText);
     } catch (error) {
       setStatus(String(error));
@@ -762,45 +797,6 @@ function ChatPanel({
     const promptText = input.trim();
     setInput("");
     await executeSendMessage(promptText);
-  }
-
-  async function handleClearChat() {
-    if (isSending || isClearing || messages.length === 0) {
-      return;
-    }
-    const shouldClear = window.confirm(
-      "Are you sure you want to permanently delete all messages in this conversation? This cannot be undone."
-    );
-    if (!shouldClear) {
-      return;
-    }
-
-    setIsClearing(true);
-    setStatus("");
-    try {
-      await clearChatHistory(sessionId);
-      setMessages([]);
-      setStatus("Chat cleared.");
-    } catch (error) {
-      setStatus(String(error));
-    } finally {
-      setIsClearing(false);
-    }
-  }
-
-  async function handleNewChat() {
-    if (isSending || isClearing) return;
-    setIsClearing(true);
-    setStatus("");
-    try {
-      await clearChatHistory(sessionId);
-      setMessages([]);
-      setInput("");
-    } catch (error) {
-      setStatus(String(error));
-    } finally {
-      setIsClearing(false);
-    }
   }
 
   function handleInputKeyDown(event: KeyboardEvent<HTMLTextAreaElement | HTMLInputElement>) {
@@ -832,7 +828,7 @@ function ChatPanel({
 
   const handleSaveEdit = useCallback(
     async (visibleIndex: number, newContent: string) => {
-      if (isSendingRef.current || isClearingRef.current || !newContent.trim()) return;
+      if (isSendingRef.current || !newContent.trim()) return;
 
       // The UI passes an index relative to visibleMessages (a tail slice of messages).
       // Offset by hiddenMessageCount to get the correct index into the full messages array.
@@ -868,7 +864,7 @@ function ChatPanel({
 
   const handleRetryMessage = useCallback(
     async (visibleIndex: number) => {
-      if (isSendingRef.current || isClearingRef.current) return;
+      if (isSendingRef.current) return;
 
       // The UI passes an index relative to visibleMessages (a tail slice of messages).
       // Offset by hiddenMessageCount to get the correct index into the full messages array.
@@ -906,7 +902,7 @@ function ChatPanel({
     [setStatus, setMessages, sessionId]
   );
 
-  function toggleDropdown(type: "vault" | "mode" | "model" | "overflow") {
+  function toggleDropdown(type: "vault" | "mode" | "model") {
     setActiveDropdown((prev) => (prev === type ? null : type));
   }
 
@@ -945,14 +941,14 @@ function ChatPanel({
               placeholder="Ask MindVault..."
               className="zen-search-input"
               autoFocus
-              disabled={isSending || isClearing}
+              disabled={isSending}
               rows={1}
             />
             <button
               type="button"
               className="zen-search-submit"
               onClick={() => void handleSend()}
-              disabled={!input.trim() || isSending || isClearing}
+              disabled={!input.trim() || isSending}
               aria-label="Send query"
             >
               ➔
@@ -1152,6 +1148,19 @@ function ChatPanel({
                 }
               >
                 {isOffTheRecord ? "🕶️ Off the Record" : "🧠 Mind Sync Active"}
+              </button>
+            </div>
+
+            {/* Pill 6: Interactive Charts */}
+            <div className="zen-pill-container">
+              <button
+                type="button"
+                className={`zen-pill charts-pill ${chartsEnabled ? "active" : ""}`}
+                onClick={handleToggleCharts}
+              >
+                <span className="zen-pill-icon">{chartsEnabled ? "📊" : "📈"}</span>
+                <span className="zen-pill-label">Charts:</span>
+                <span className="zen-pill-value">{chartsEnabled ? "ON" : "OFF"}</span>
               </button>
             </div>
           </div>
@@ -1434,80 +1443,25 @@ function ChatPanel({
                 type="button"
                 className="convert-memory-btn"
                 onClick={() => void handleConvertToMemory()}
-                disabled={isConverting || isSending}
-                title="Retroactively save this brainstorm session to your long-term memory vault"
+                disabled={isConverting || isSending || messages.length === 0}
+                title="Save this temporary brainstorm as a normal conversation"
               >
                 {isConverting ? "Saving..." : "Save Brainstorm to Memory"}
               </button>
             </div>
           )}
 
-          {/* Overflow dropdown trigger */}
-          <div
-            className="zen-pill-container overflow-container"
-            onClick={(e) => e.stopPropagation()}
-          >
+          {/* Pill 6: Interactive Charts */}
+          <div className="zen-pill-container">
             <button
               type="button"
-              className={`compact-pill-more ${activeDropdown === "overflow" ? "active" : ""}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleDropdown("overflow");
-              }}
-              aria-label="More options"
+              className={`zen-pill charts-pill ${chartsEnabled ? "active" : ""}`}
+              onClick={handleToggleCharts}
             >
-              ···
+              <span className="zen-pill-icon">{chartsEnabled ? "📊" : "📈"}</span>
+              <span className="zen-pill-label">Charts:</span>
+              <span className="zen-pill-value">{chartsEnabled ? "ON" : "OFF"}</span>
             </button>
-            {activeDropdown === "overflow" && (
-              <div className="zen-dropdown overflow-dropdown">
-                <button
-                  type="button"
-                  className="zen-dropdown-item new-chat-item"
-                  onClick={() => {
-                    setActiveDropdown(null);
-                    void handleNewChat();
-                  }}
-                >
-                  <span className="item-icon">✨</span>
-                  <div className="item-details">
-                    <div className="item-title">New Chat</div>
-                    <div className="item-desc">Start a fresh conversation</div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  className={`zen-dropdown-item charts-toggle-item ${chartsEnabled ? "selected" : ""}`}
-                  onClick={() => {
-                    setActiveDropdown(null);
-                    handleToggleCharts();
-                  }}
-                >
-                  <span className="item-icon">{chartsEnabled ? "📊" : "📈"}</span>
-                  <div className="item-details">
-                    <div className="item-title">
-                      Interactive Charts: {chartsEnabled ? "ON" : "OFF"}
-                    </div>
-                    <div className="item-desc">
-                      Toggle mathematical and statistical visualizations
-                    </div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  className="zen-dropdown-item danger-item"
-                  onClick={() => {
-                    setActiveDropdown(null);
-                    void handleClearChat();
-                  }}
-                >
-                  <span className="item-icon">🗑️</span>
-                  <div className="item-details">
-                    <div className="item-title">Delete Chat History</div>
-                    <div className="item-desc">Permanently erase all messages</div>
-                  </div>
-                </button>
-              </div>
-            )}
           </div>
         </div>
 
@@ -1519,7 +1473,7 @@ function ChatPanel({
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleInputKeyDown}
             placeholder="Ask MindVault..."
-            disabled={isSending || isClearing}
+            disabled={isSending}
             rows={1}
           />
           <button
