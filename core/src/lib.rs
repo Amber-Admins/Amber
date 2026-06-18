@@ -3667,9 +3667,10 @@ async fn chat_convert_temporary_to_memory(
     state: tauri::State<'_, AppState>,
 ) -> Result<ChatConversionResult, String> {
     let db_path = state.db_path.clone();
-    let conn = open_connection(&db_path)?;
+    let mut conn = open_connection(&db_path)?;
 
-    let converted_session = chat::convert_temporary_to_memory(&conn, target_session_id.as_deref())?;
+    let converted_session =
+        chat::convert_temporary_to_memory(&mut conn, target_session_id.as_deref())?;
 
     conn.execute(
         "UPDATE settings SET value = 'false', updated_at = datetime('now')

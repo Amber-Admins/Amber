@@ -267,14 +267,15 @@ pub struct ConvertedSession {
 }
 
 pub fn convert_temporary_to_memory(
-    conn: &Connection,
+    conn: &mut Connection,
     target_session_id: Option<&str>,
 ) -> Result<ConvertedSession, String> {
-    conn.execute("SAVEPOINT convert_temporary_sp;", [])
+    let sp = conn
+        .savepoint()
         .map_err(|err| format!("Failed starting conversion savepoint: {err}"))?;
 
-    let run_convert = || -> Result<ConvertedSession, String> {
-        let mut stmt = conn
+    let rows: Vec<(String, String, String)> = {
+        let mut stmt = sp
             .prepare(
                 "SELECT role, content, created_at FROM session_messages
                  WHERE session_id = ?1
@@ -282,57 +283,49 @@ pub fn convert_temporary_to_memory(
             )
             .map_err(|err| format!("Failed preparing temporary session query: {err}"))?;
 
-        let rows: Vec<(String, String, String)> = stmt
+        let res = stmt
             .query_map(params![TEMPORARY_SESSION_ID], |row| {
                 Ok((row.get(0)?, row.get(1)?, row.get(2)?))
             })
             .map_err(|err| format!("Failed querying temporary messages: {err}"))?
-            .collect::<Result<_, _>>()
+            .collect::<Result<Vec<(String, String, String)>, _>>()
             .map_err(|err| format!("Failed reading temporary message row: {err}"))?;
-
-        if rows.is_empty() {
-            return Err("No off-the-record messages to save.".to_string());
-        }
-
-        let summary = derive_converted_session_summary(&rows);
-        let started_at = rows
-            .first()
-            .map(|(_, _, created_at)| created_at.clone())
-            .ok_or_else(|| "No off-the-record messages to save.".to_string())?;
-        let saved_session_id =
-            select_saved_session_id(conn, target_session_id, &summary, &started_at)?;
-
-        conn.execute(
-            "UPDATE session_messages
-             SET session_id = ?1
-             WHERE session_id = ?2;",
-            params![&saved_session_id, TEMPORARY_SESSION_ID],
-        )
-        .map_err(|err| format!("Failed moving brainstorm messages: {err}"))?;
-
-        conn.execute(
-            "DELETE FROM sessions WHERE id = ?1;",
-            params![TEMPORARY_SESSION_ID],
-        )
-        .map_err(|err| format!("Failed deleting temporary session shell: {err}"))?;
-
-        Ok(ConvertedSession {
-            session_id: saved_session_id,
-            summary: Some(summary),
-        })
+        res
     };
 
-    match run_convert() {
-        Ok(converted) => {
-            conn.execute("RELEASE convert_temporary_sp;", [])
-                .map_err(|err| format!("Failed releasing savepoint: {err}"))?;
-            Ok(converted)
-        }
-        Err(err) => {
-            let _ = conn.execute("ROLLBACK TO convert_temporary_sp;", []);
-            Err(err)
-        }
+    if rows.is_empty() {
+        return Err("No off-the-record messages to save.".to_string());
     }
+
+    let summary = derive_converted_session_summary(&rows);
+    let started_at = rows
+        .first()
+        .map(|(_, _, created_at)| created_at.clone())
+        .ok_or_else(|| "No off-the-record messages to save.".to_string())?;
+
+    let saved_session_id = select_saved_session_id(&sp, target_session_id, &summary, &started_at)?;
+
+    sp.execute(
+        "UPDATE session_messages
+         SET session_id = ?1
+         WHERE session_id = ?2;",
+        params![&saved_session_id, TEMPORARY_SESSION_ID],
+    )
+    .map_err(|err| format!("Failed moving brainstorm messages: {err}"))?;
+
+    sp.execute(
+        "DELETE FROM sessions WHERE id = ?1;",
+        params![TEMPORARY_SESSION_ID],
+    )
+    .map_err(|err| format!("Failed deleting temporary session shell: {err}"))?;
+
+    sp.commit()
+        .map_err(|err| format!("Failed committing savepoint: {err}"))?;
+
+    Ok(ConvertedSession {
+        session_id: saved_session_id,
+        summary: Some(summary),
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -480,7 +473,7 @@ mod tests {
     #[test]
     fn test_convert_temporary_to_memory_reuses_empty_target_session(
     ) -> Result<(), Box<dyn std::error::Error>> {
-        let conn = setup_test_db()?;
+        let mut conn = setup_test_db()?;
 
         create_session(
             &conn,
@@ -502,7 +495,7 @@ mod tests {
             TEMPORARY_SESSION_ID,
         )?;
 
-        let converted = convert_temporary_to_memory(&conn, Some("target-session"))?;
+        let converted = convert_temporary_to_memory(&mut conn, Some("target-session"))?;
         assert_eq!(converted.session_id, "target-session");
         assert_eq!(
             converted.summary.as_deref(),
