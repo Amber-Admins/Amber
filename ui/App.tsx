@@ -25,6 +25,7 @@ import styles from "./style/components/MemoryBadge.module.css";
 import { countPendingChangesetItems } from "./services/memoryAgent";
 import "./style/MonoStyles.css";
 import ChatHistoryPanel from "./components/ChatHistoryPanel";
+import { chatListSessions, chatCreateSession, getChatHistory } from "./services/chat";
 
 const SIDEBAR_RAIL_WIDTH = 48;
 
@@ -39,6 +40,43 @@ function App() {
   const [isDiffPanelOpen, setIsDiffPanelOpen] = useState<boolean>(false);
   const [selectedChangesetId, setSelectedChangesetId] = useState<string | null>(null);
   const [leftPanelView, setLeftPanelView] = useState<"browse" | "history">("browse");
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const initializeSession = async () => {
+      try {
+        const sessions = await chatListSessions();
+        if (!active) return;
+
+        let reuseSessionId: string | null = null;
+        if (sessions.length > 0) {
+          // If the most recent conversation is empty (has no messages), reuse it
+          const mostRecent = sessions[0];
+          const history = await getChatHistory(mostRecent.id);
+          if (history.length === 0) {
+            reuseSessionId = mostRecent.id;
+          }
+        }
+
+        if (reuseSessionId) {
+          setActiveSessionId(reuseSessionId);
+        } else {
+          const newId = crypto.randomUUID();
+          await chatCreateSession(newId, "New Conversation");
+          if (!active) return;
+          setActiveSessionId(newId);
+          window.dispatchEvent(new CustomEvent("mindvault:chat-external-updated"));
+        }
+      } catch (err) {
+        console.error("Failed to initialize chat session:", err);
+      }
+    };
+    void initializeSession();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -553,23 +591,27 @@ function App() {
                     overflow: "hidden",
                   }}
                 >
-                  <ChatPanel
-                    selectedNodeIds={scopeNodeIds}
-                    scope={assemblerScope}
-                    selectedVaultId={selectedVaultId}
-                    onSelectVault={onSelectVault}
-                    onOpenSettings={onOpenSettings}
-                    isRedactedUnlocked={isRedactedUnlocked}
-                    onModalToggle={setChatModalOpen}
-                    onSelectNode={onSelectNode}
-                    nodeRefreshKey={nodeRefreshKey}
-                    visible={viewMode === "chat"}
-                    onRefreshPendingCount={() => {
-                      void countPendingChangesetItems()
-                        .then(setPendingProposalCount)
-                        .catch(console.error);
-                    }}
-                  />
+                  {activeSessionId && (
+                    <ChatPanel
+                      selectedNodeIds={scopeNodeIds}
+                      scope={assemblerScope}
+                      selectedVaultId={selectedVaultId}
+                      onSelectVault={onSelectVault}
+                      onOpenSettings={onOpenSettings}
+                      isRedactedUnlocked={isRedactedUnlocked}
+                      onModalToggle={setChatModalOpen}
+                      onSelectNode={onSelectNode}
+                      nodeRefreshKey={nodeRefreshKey}
+                      visible={viewMode === "chat"}
+                      onRefreshPendingCount={() => {
+                        void countPendingChangesetItems()
+                          .then(setPendingProposalCount)
+                          .catch(console.error);
+                      }}
+                      activeSessionId={activeSessionId}
+                      onActivateSession={setActiveSessionId}
+                    />
+                  )}
                 </div>
 
                 {viewMode === "editor" ? (
@@ -612,7 +654,10 @@ function App() {
                   style={{ width: `${leftPaneWidth}px` }}
                 >
                   {leftPanelView === "history" ? (
-                    <ChatHistoryPanel />
+                    <ChatHistoryPanel
+                      activeSessionId={activeSessionId}
+                      setActiveSessionId={setActiveSessionId}
+                    />
                   ) : !selectedVaultId ? (
                     <VaultSidebar
                       selectedVaultId={selectedVaultId}

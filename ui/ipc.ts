@@ -27,6 +27,18 @@ export type ChatMessage = {
   created_at: string;
   isStreaming?: boolean;
 };
+export type ChatSession = {
+  id: string;
+  vaultId: string | null;
+  startedAt: string;
+  summary: string | null;
+};
+export type ChatConversionResult = {
+  sessionId: string;
+  summary: string | null;
+  changeset: Changeset | null;
+  extractionError: string | null;
+};
 export type {
   Backlink,
   Changeset,
@@ -89,20 +101,25 @@ export function onboardingSetComplete(isComplete: boolean) {
   return settingsSet("onboarding_complete", JSON.stringify(isComplete));
 }
 
-export function chatGetHistory() {
-  return invokeTyped<ChatMessage[]>("chat_get_history");
+export function chatGetHistory(sessionId: string) {
+  return invokeTyped<ChatMessage[]>("chat_get_history", { sessionId });
 }
 
-export function chatAppendMessage(id: string, role: string, content: string) {
-  return invokeTyped<void>("chat_append_message", { id, role, content });
+export function chatAppendMessage(id: string, role: string, content: string, sessionId: string) {
+  return invokeTyped<void>("chat_append_message", { id, role, content, sessionId });
 }
 
-export function chatClearHistory() {
-  return invokeTyped<void>("chat_clear_history");
+export function chatClearHistory(sessionId: string) {
+  return invokeTyped<void>("chat_clear_history", { sessionId });
 }
 
-export function chatEditAndTruncate(editId: string, newContent: string, deleteIds: string[]) {
-  return invokeTyped<void>("chat_edit_and_truncate", { editId, newContent, deleteIds });
+export function chatEditAndTruncate(
+  editId: string,
+  newContent: string,
+  deleteIds: string[],
+  sessionId: string
+) {
+  return invokeTyped<void>("chat_edit_and_truncate", { editId, newContent, deleteIds, sessionId });
 }
 
 export function vaultCreate(input: VaultCreateInput) {
@@ -245,7 +262,8 @@ export function chatWithLlm(
   model: string,
   userPrompt: string,
   chartsEnabled: boolean,
-  isRedactedUnlocked: boolean
+  isRedactedUnlocked: boolean,
+  sessionId: string
 ) {
   return invoke<string>("llm_chat", {
     nodeIds,
@@ -256,6 +274,7 @@ export function chatWithLlm(
     userPrompt,
     chartsEnabled,
     isRedactedUnlocked,
+    sessionId,
   })
     .then((ok) => ({ ok }) as IpcResult<string>)
     .catch((error) => ({ err: String(error) }) as IpcResult<string>);
@@ -293,8 +312,18 @@ export function memoryExtract(provider: string, endpoint: string, model: string)
     .catch((error) => ({ err: String(error) }) as IpcResult<Changeset>);
 }
 
-export function memoryExtractIfReady(provider: string, endpoint: string, model: string) {
-  return invoke<Changeset | null>("memory_extract_if_ready", { provider, endpoint, model })
+export function memoryExtractIfReady(
+  provider: string,
+  endpoint: string,
+  model: string,
+  sessionId: string
+) {
+  return invoke<Changeset | null>("memory_extract_if_ready", {
+    provider,
+    endpoint,
+    model,
+    sessionId,
+  })
     .then((ok) => ({ ok }) as IpcResult<Changeset | null>)
     .catch((error) => ({ err: String(error) }) as IpcResult<Changeset | null>);
 }
@@ -347,4 +376,44 @@ export function memoryExtractForce(
   })
     .then((ok) => ({ ok }) as IpcResult<Changeset>)
     .catch((error) => ({ err: String(error) }) as IpcResult<Changeset>);
+}
+
+export function chatSetOffTheRecord(enabled: boolean) {
+  return invokeTyped<boolean>("chat_set_off_the_record", { enabled });
+}
+
+export function chatIsOffTheRecord() {
+  return invokeTyped<boolean>("chat_is_off_the_record");
+}
+
+export function chatConvertTemporaryToMemory(
+  provider: string,
+  endpoint: string,
+  model: string,
+  targetSessionId?: string | null
+): Promise<IpcResult<ChatConversionResult>> {
+  return invoke<ChatConversionResult>("chat_convert_temporary_to_memory", {
+    provider,
+    endpoint,
+    model,
+    targetSessionId,
+  })
+    .then((ok) => ({ ok }) as IpcResult<ChatConversionResult>)
+    .catch((error) => ({ err: String(error) }) as IpcResult<ChatConversionResult>);
+}
+
+export function chatListSessions() {
+  return invokeTyped<ChatSession[]>("chat_list_sessions");
+}
+
+export function chatCreateSession(id: string, summary?: string) {
+  return invokeTyped<void>("chat_create_session", { id, summary });
+}
+
+export function chatDeleteSession(id: string) {
+  return invokeTyped<void>("chat_delete_session", { id });
+}
+
+export function chatUpdateSessionSummary(id: string, summary: string) {
+  return invokeTyped<void>("chat_update_session_summary", { id, summary });
 }
