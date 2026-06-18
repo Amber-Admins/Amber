@@ -381,8 +381,10 @@ function ChatPanel({
     setIsOffTheRecord(next);
     try {
       await chatSetOffTheRecord(next);
-      // Clear the session we're switching away from, then load the new one
-      await clearChatHistory(sessionId);
+      // Only clear the temporary session when switching away from it (deactivating OTR)
+      if (sessionId === "temporary-session") {
+        await clearChatHistory(sessionId);
+      }
       const history = await getChatHistory(nextSessionId);
       setMessages(history);
       setInput("");
