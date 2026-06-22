@@ -6,7 +6,7 @@ pub struct OllamaEmbedEngine {
     endpoint: String,
     model_id: String,
     dims: usize,
-    client: reqwest::Client,
+    client: reqwest::blocking::Client,
 }
 
 impl OllamaEmbedEngine {
@@ -15,7 +15,7 @@ impl OllamaEmbedEngine {
             endpoint: endpoint.into(),
             model_id: model_id.into(),
             dims,
-            client: reqwest::Client::new(),
+            client: reqwest::blocking::Client::new(),
         }
     }
 
@@ -51,35 +51,30 @@ impl EmbedEngine for OllamaEmbedEngine {
 
         let url = format!("{}/api/embed", self.endpoint.trim_end_matches('/'));
 
-        let future = async {
-            let response = self
-                .client
-                .post(&url)
-                .timeout(Duration::from_secs(10))
-                .json(&payload)
-                .send()
-                .await
-                .map_err(|err| {
-                    EmbedError::InferenceFailed(format!("failed to connect to Ollama: {}", err))
-                })?;
-
-            let status = response.status();
-            if !status.is_success() {
-                let error_body = response.text().await.unwrap_or_default();
-                return Err(EmbedError::InferenceFailed(format!(
-                    "Ollama returned error status ({}): {}",
-                    status, error_body
-                )));
-            }
-
-            let parsed: OllamaEmbedResponse = response.json().await.map_err(|err| {
-                EmbedError::InferenceFailed(format!("failed to parse Ollama response: {}", err))
+        let response = self
+            .client
+            .post(&url)
+            .timeout(Duration::from_secs(10))
+            .json(&payload)
+            .send()
+            .map_err(|err| {
+                EmbedError::InferenceFailed(format!("failed to connect to Ollama: {}", err))
             })?;
 
-            Ok(parsed.embeddings)
-        };
+        let status = response.status();
+        if !status.is_success() {
+            let error_body = response.text().unwrap_or_default();
+            return Err(EmbedError::InferenceFailed(format!(
+                "Ollama returned error status ({}): {}",
+                status, error_body
+            )));
+        }
 
-        let embeddings = tauri::async_runtime::block_on(future)?;
+        let parsed: OllamaEmbedResponse = response.json().map_err(|err| {
+            EmbedError::InferenceFailed(format!("failed to parse Ollama response: {}", err))
+        })?;
+
+        let embeddings = parsed.embeddings;
 
         if embeddings.len() != texts.len() {
             return Err(EmbedError::InferenceFailed(format!(

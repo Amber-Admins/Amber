@@ -51,28 +51,31 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_normalize_all_zero_norm_fallback() {
+    fn test_normalize_all_zero_norm_fallback() -> Result<(), Box<dyn std::error::Error>> {
         let input = vec![vec![0.0, 0.0, 0.0]];
-        let result = normalize_all(input).unwrap();
+        let result = normalize_all(input)?;
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], vec![1.0, 0.0, 0.0]);
+        Ok(())
     }
 
     #[test]
-    fn test_normalize_all_standard() {
+    fn test_normalize_all_standard() -> Result<(), Box<dyn std::error::Error>> {
         let input = vec![vec![3.0, 4.0, 0.0]];
-        let result = normalize_all(input).unwrap();
+        let result = normalize_all(input)?;
         assert_eq!(result.len(), 1);
         assert!((result[0][0] - 0.6).abs() < 1e-5);
         assert!((result[0][1] - 0.8).abs() < 1e-5);
         assert!((result[0][2] - 0.0).abs() < 1e-5);
+        Ok(())
     }
 
     #[test]
-    fn test_normalize_all_empty_vector() {
+    fn test_normalize_all_empty_vector() -> Result<(), Box<dyn std::error::Error>> {
         let input = vec![vec![]];
-        let result = normalize_all(input).unwrap();
+        let result = normalize_all(input)?;
         assert_eq!(result.len(), 1);
         assert!(result[0].is_empty());
+        Ok(())
     }
 }
