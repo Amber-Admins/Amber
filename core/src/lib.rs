@@ -2208,11 +2208,13 @@ fn embedding_reembed_start(
         };
 
         let embed_job = Arc::clone(&state.embed_job);
-        with_embed_job_lock(&embed_job, |slot| {
-            if let Some(old_handle) = slot.as_ref() {
-                old_handle.cancel.store(true, Ordering::Relaxed);
-            }
-        })?;
+        let is_active = with_embed_job_lock(&embed_job, |slot| slot.is_some())?;
+        if is_active {
+            return Err(
+                "An embedding job is already active. Please cancel it or wait for it to finish."
+                    .to_string(),
+            );
+        }
 
         let cancel = Arc::new(AtomicBool::new(false));
         with_embed_job_lock(&embed_job, |slot| {
