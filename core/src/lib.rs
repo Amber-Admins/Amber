@@ -1107,14 +1107,50 @@ fn spawn_single_node_embedding(db_path: PathBuf, node_id: String) {
         let (tx, rx) = std::sync::mpsc::channel::<SingleNodeEmbedTask>();
 
         std::thread::spawn(move || {
+            let mut cached_conn: Option<(PathBuf, Connection)> = None;
+            let mut cached_engine: Option<(embed::EmbeddingSettings, Box<dyn embed::EmbedEngine>)> =
+                None;
+
             for task in rx {
                 let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(
                     || -> Result<(), String> {
-                        let mut conn = open_connection(&task.db_path)?;
-                        let engine = build_embed_engine_from_settings(&conn)
-                            .map_err(|err| err.to_string())?;
+                        let conn_is_valid = match &cached_conn {
+                            Some((path, _)) => path == &task.db_path,
+                            None => false,
+                        };
+                        if !conn_is_valid {
+                            let new_conn = open_connection(&task.db_path)?;
+                            cached_conn = Some((task.db_path.clone(), new_conn));
+                        }
+                        let conn = &mut cached_conn
+                            .as_mut()
+                            .ok_or_else(|| "Connection caching logic error".to_string())?
+                            .1;
+
+                        let current_settings =
+                            embed::get_embedding_settings(conn).map_err(|err| err.to_string())?;
+
+                        let need_rebuild = match &cached_engine {
+                            Some((settings, _)) => {
+                                settings.model != current_settings.model
+                                    || settings.backend != current_settings.backend
+                                    || settings.tier != current_settings.tier
+                            }
+                            None => true,
+                        };
+
+                        if need_rebuild {
+                            let engine = build_embed_engine_from_config(conn, &current_settings)
+                                .map_err(|err| err.to_string())?;
+                            cached_engine = Some((current_settings, engine));
+                        }
+
+                        let (_, engine) = cached_engine
+                            .as_ref()
+                            .ok_or_else(|| "Engine caching logic error".to_string())?;
+
                         let cancel = AtomicBool::new(false);
-                        embed::embed_node(&mut conn, &task.node_id, engine.as_ref(), &cancel)
+                        embed::embed_node(conn, &task.node_id, engine.as_ref(), &cancel)
                             .map(|_| ())
                             .map_err(|err| err.to_string())
                     },
@@ -1133,6 +1169,8 @@ fn spawn_single_node_embedding(db_path: PathBuf, node_id: String) {
                             "[embed] single-node embedding panicked for {}",
                             task.node_id
                         );
+                        cached_conn = None;
+                        cached_engine = None;
                     }
                 }
             }
