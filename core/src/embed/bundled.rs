@@ -316,16 +316,17 @@ fn ensure_file_exists(path: &Path, label: &str) -> Result<(), EmbedError> {
 }
 
 fn build_session(model_path: &Path) -> Result<Session, EmbedError> {
-    let builder = Session::builder()
-        .and_then(|builder| builder.with_optimization_level(GraphOptimizationLevel::Level3))
-        .map_err(|err| {
-            EmbedError::InferenceFailed(format!("failed to create ONNX session builder: {}", err))
-        })?;
-
     #[cfg(target_os = "windows")]
     {
+        let builder = Session::builder()
+            .and_then(|builder| builder.with_optimization_level(GraphOptimizationLevel::Level3))
+            .map_err(|err| {
+                EmbedError::InferenceFailed(format!(
+                    "failed to create ONNX session builder: {}",
+                    err
+                ))
+            })?;
         match builder
-            .clone()
             .with_execution_providers([DirectMLExecutionProvider::default().build()])
             .and_then(|builder| builder.commit_from_file(model_path))
         {
@@ -339,6 +340,11 @@ fn build_session(model_path: &Path) -> Result<Session, EmbedError> {
         }
     }
 
+    let builder = Session::builder()
+        .and_then(|builder| builder.with_optimization_level(GraphOptimizationLevel::Level3))
+        .map_err(|err| {
+            EmbedError::InferenceFailed(format!("failed to create ONNX session builder: {}", err))
+        })?;
     builder
         .with_execution_providers([CPUExecutionProvider::default().build()])
         .and_then(|builder| builder.commit_from_file(model_path))
