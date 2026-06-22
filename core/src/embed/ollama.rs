@@ -54,7 +54,7 @@ impl EmbedEngine for OllamaEmbedEngine {
         let response = self
             .client
             .post(&url)
-            .timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(60))
             .json(&payload)
             .send()
             .map_err(|err| {
