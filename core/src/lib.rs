@@ -2246,18 +2246,34 @@ fn embedding_reembed_start(
         check_rate_limit("embedding")?;
         embed::validate_reembed_input(&payload)?;
 
-        let mut conn = open_connection(&state.db_path)?;
+        let embed_job = Arc::clone(&state.embed_job);
+        let cancel = Arc::new(AtomicBool::new(false));
 
-        let temp_settings = embed::EmbeddingSettings {
-            model: payload.model.trim().to_string(),
-            tier: payload.tier.trim().to_ascii_lowercase(),
-            backend: payload.backend.trim().to_ascii_lowercase(),
-            last_computed_at: None,
-        };
-        build_embed_engine_from_config(&conn, &temp_settings)
-            .map_err(|err| format!("Failed to initialize embedding engine: {err}"))?;
+        with_embed_job_lock(&embed_job, |slot| {
+            if slot.is_some() {
+                return Err(
+                    "An embedding job is already active. Please cancel it or wait for it to finish."
+                        .to_string(),
+                );
+            }
+            *slot = Some(embed::EmbedJobHandle {
+                cancel: Arc::clone(&cancel),
+            });
+            Ok(())
+        })??;
 
-        let old_model_id = {
+        let result = (|| -> Result<(String, Connection), String> {
+            let mut conn = open_connection(&state.db_path)?;
+
+            let temp_settings = embed::EmbeddingSettings {
+                model: payload.model.trim().to_string(),
+                tier: payload.tier.trim().to_ascii_lowercase(),
+                backend: payload.backend.trim().to_ascii_lowercase(),
+                last_computed_at: None,
+            };
+            build_embed_engine_from_config(&conn, &temp_settings)
+                .map_err(|err| format!("Failed to initialize embedding engine: {err}"))?;
+
             let tx = conn
                 .transaction()
                 .map_err(|err| format!("Failed starting embedding settings transaction: {err}"))?;
@@ -2269,24 +2285,18 @@ fn embedding_reembed_start(
 
             tx.commit()
                 .map_err(|err| format!("Failed committing embedding settings: {err}"))?;
-            old_model
+            Ok((old_model, conn))
+        })();
+
+        let (old_model_id, conn) = match result {
+            Ok(val) => val,
+            Err(err) => {
+                let _ = with_embed_job_lock(&embed_job, |slot| {
+                    *slot = None;
+                });
+                return Err(err);
+            }
         };
-
-        let embed_job = Arc::clone(&state.embed_job);
-        let is_active = with_embed_job_lock(&embed_job, |slot| slot.is_some())?;
-        if is_active {
-            return Err(
-                "An embedding job is already active. Please cancel it or wait for it to finish."
-                    .to_string(),
-            );
-        }
-
-        let cancel = Arc::new(AtomicBool::new(false));
-        with_embed_job_lock(&embed_job, |slot| {
-            *slot = Some(embed::EmbedJobHandle {
-                cancel: Arc::clone(&cancel),
-            });
-        })?;
 
         if let Ok(status) = build_embedding_status(&conn, true) {
             let _emit_result = app_handle.emit("embedding-status-changed", status);
