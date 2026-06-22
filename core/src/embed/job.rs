@@ -184,12 +184,25 @@ pub fn embed_all_nodes(
             return EmbedJobResult::Cancelled;
         }
 
+        // Resumable check: if an up-to-date primary embedding already exists for this model, skip it
+        match crate::embed::storage::get_primary_embedding(conn, &node_id, engine.model_id()) {
+            Ok(Some(_)) => {
+                continue;
+            }
+            Ok(None) => {}
+            Err(err) => {
+                eprintln!("[embed] Error checking existing embedding for node {node_id}: {err}");
+            }
+        }
+
         match embed_node(conn, &node_id, engine, cancel) {
             Ok(true) => nodes_embedded += 1,
             Ok(false) => {}
             Err(EmbedError::Cancelled) => return EmbedJobResult::Cancelled,
             Err(err) => {
-                return EmbedJobResult::Failed(format!("failed embedding node {node_id}: {err}"));
+                eprintln!(
+                    "[embed] Failed to embed node {node_id} (skipping and continuing): {err}"
+                );
             }
         }
     }
@@ -465,19 +478,18 @@ mod tests {
     ) -> Result<(), Box<dyn std::error::Error>> {
         let mut conn = setup_job_db()?;
         conn.execute("UPDATE nodes SET detail = NULL;", [])?;
-        for node_id in ["node_test_1", "node_test_2"] {
-            upsert_embedding(
-                &conn,
-                &EmbeddingRow {
-                    node_id: node_id.to_string(),
-                    chunk_index: 0,
-                    chunk_type: "primary".to_string(),
-                    model: TEST_MODEL.to_string(),
-                    embedding: vec![9.0; TEST_DIMS],
-                    computed_at: "old".to_string(),
-                },
-            )?;
-        }
+        // Seed only node_test_2 so node_test_1 is processed and triggers cancel
+        upsert_embedding(
+            &conn,
+            &EmbeddingRow {
+                node_id: "node_test_2".to_string(),
+                chunk_index: 0,
+                chunk_type: "primary".to_string(),
+                model: TEST_MODEL.to_string(),
+                embedding: vec![9.0; TEST_DIMS],
+                computed_at: "old".to_string(),
+            },
+        )?;
 
         let cancel = Arc::new(AtomicBool::new(false));
         let engine = FakeEmbedEngine {
@@ -518,10 +530,70 @@ mod tests {
 
         let result = embed_all_nodes(&mut conn, &engine, &cancel, None);
 
-        assert!(matches!(result, EmbedJobResult::Failed(_)));
+        assert_eq!(result, EmbedJobResult::Completed { nodes_embedded: 0 });
         let existing = get_primary_embedding(&conn, "node_test_1", TEST_MODEL)?
             .ok_or("expected existing embedding")?;
         assert_eq!(existing, vec![42.0; TEST_DIMS]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_embed_all_nodes_resumable() -> Result<(), Box<dyn std::error::Error>> {
+        let mut conn = setup_job_db()?;
+        // Update details to NULL to ensure exactly 1 chunk per node
+        conn.execute("UPDATE nodes SET detail = NULL;", [])?;
+
+        // Seed node_test_1 with embedding
+        upsert_embedding(
+            &conn,
+            &EmbeddingRow {
+                node_id: "node_test_1".to_string(),
+                chunk_index: 0,
+                chunk_type: "primary".to_string(),
+                model: TEST_MODEL.to_string(),
+                embedding: vec![7.0; TEST_DIMS],
+                computed_at: "old".to_string(),
+            },
+        )?;
+
+        let engine = FakeEmbedEngine::new();
+        let cancel = AtomicBool::new(false);
+
+        let result = embed_all_nodes(&mut conn, &engine, &cancel, None);
+
+        // node_test_1 is skipped, node_test_2 is embedded.
+        assert_eq!(result, EmbedJobResult::Completed { nodes_embedded: 1 });
+        // The engine should only have been called once (for node_test_2's single primary chunk)
+        assert_eq!(engine.calls(), 1);
+
+        // node_test_1 embedding should still be the old one
+        let val = get_primary_embedding(&conn, "node_test_1", TEST_MODEL)?
+            .ok_or("expected primary embedding for node_test_1")?;
+        assert_eq!(val, vec![7.0; TEST_DIMS]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_embed_all_nodes_continues_on_failure() -> Result<(), Box<dyn std::error::Error>> {
+        let mut conn = setup_job_db()?;
+        // Update details to NULL to ensure exactly 1 chunk per node
+        conn.execute("UPDATE nodes SET detail = NULL;", [])?;
+
+        // Both nodes have no embeddings.
+        // We make the first call fail.
+        let engine = FakeEmbedEngine {
+            fail_after_call: Some(1),
+            ..FakeEmbedEngine::new()
+        };
+        let cancel = AtomicBool::new(false);
+
+        let result = embed_all_nodes(&mut conn, &engine, &cancel, None);
+
+        // The first node fails, but the second one is still embedded.
+        assert_eq!(result, EmbedJobResult::Completed { nodes_embedded: 1 });
+        assert_eq!(engine.calls(), 2); // Both nodes (1 chunk each) were processed
+
         Ok(())
     }
 
