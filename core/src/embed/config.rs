@@ -1,6 +1,7 @@
 use crate::embed::{
     load_registry, resolve_embedding_tier, stub_hardware_profile, tier_config, Tier, TierConfig,
 };
+use crate::ipc_types::EmbeddingReembedInput;
 use rusqlite::{params, Connection, OptionalExtension};
 
 pub const EMBEDDING_MODEL_KEY: &str = "embedding.model";
@@ -82,10 +83,12 @@ pub fn chunking_config_for_settings(settings: &EmbeddingSettings) -> Result<Tier
             let config = tier_config(&settings.tier)
                 .ok_or_else(|| format!("unknown embedding tier: {}", settings.tier))?;
             if settings.model != config.model_id {
-                return Err(format!(
-                    "embedding.model '{}' does not match {} tier model '{}'",
-                    settings.model, settings.tier, config.model_id
-                ));
+                return tier_config_for_model(&settings.model).ok_or_else(|| {
+                    format!(
+                        "embedding.model '{}' does not match {} tier model '{}' and is not a registered ONNX model",
+                        settings.model, settings.tier, config.model_id
+                    )
+                });
             }
             Ok(config)
         }
@@ -112,6 +115,61 @@ pub fn chunking_config_for_settings(settings: &EmbeddingSettings) -> Result<Tier
         }
         other => Err(format!("unsupported embedding backend: {other}")),
     }
+}
+
+pub fn validate_reembed_input(input: &EmbeddingReembedInput) -> Result<(), String> {
+    let model = input.model.trim();
+    let tier = input.tier.trim().to_ascii_lowercase();
+    let backend = input.backend.trim().to_ascii_lowercase();
+
+    if model.is_empty() {
+        return Err("embedding model must not be empty".to_string());
+    }
+    if tier.is_empty() {
+        return Err("embedding tier must not be empty".to_string());
+    }
+    if backend.is_empty() {
+        return Err("embedding backend must not be empty".to_string());
+    }
+
+    let registry = load_registry()?;
+    match backend.as_str() {
+        "onnx" => {
+            let config = match tier.as_str() {
+                "light" => &registry.tiers.light,
+                "standard" => &registry.tiers.standard,
+                "quality" => &registry.tiers.quality,
+                _ => return Err(format!("unsupported embedding tier for ONNX: {tier}")),
+            };
+            if model != config.model_id {
+                return Err(format!(
+                    "embedding model '{}' is not valid for ONNX tier '{}'; expected '{}'",
+                    model, tier, config.model_id
+                ));
+            }
+        }
+        "ollama" => {
+            if model != registry.ollama_default.model_id {
+                return Err(format!(
+                    "embedding model '{}' is not valid for Ollama; expected '{}'",
+                    model, registry.ollama_default.model_id
+                ));
+            }
+        }
+        _ => return Err(format!("unsupported embedding backend: {backend}")),
+    }
+
+    Ok(())
+}
+
+fn tier_config_for_model(model: &str) -> Option<TierConfig> {
+    let registry = load_registry().ok()?;
+    let tiers = [
+        registry.tiers.light,
+        registry.tiers.standard,
+        registry.tiers.quality,
+    ];
+    tiers.into_iter().find(|config| config.model_id == model)
 }
 
 fn read_string_setting(conn: &Connection, key: &str) -> Result<Option<String>, String> {

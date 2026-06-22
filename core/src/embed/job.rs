@@ -461,6 +461,41 @@ mod tests {
     }
 
     #[test]
+    fn test_same_model_reembed_none_preserves_unprocessed_rows_on_cancel(
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let conn = setup_job_db()?;
+        conn.execute("UPDATE nodes SET detail = NULL;", [])?;
+        for node_id in ["node_test_1", "node_test_2"] {
+            upsert_embedding(
+                &conn,
+                &EmbeddingRow {
+                    node_id: node_id.to_string(),
+                    chunk_index: 0,
+                    chunk_type: "primary".to_string(),
+                    model: TEST_MODEL.to_string(),
+                    embedding: vec![9.0; TEST_DIMS],
+                    computed_at: "old".to_string(),
+                },
+            )?;
+        }
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let engine = FakeEmbedEngine {
+            cancel_after_call: Some(1),
+            cancel: Some(Arc::clone(&cancel)),
+            ..FakeEmbedEngine::new()
+        };
+
+        let result = embed_all_nodes(&conn, &engine, &cancel, None);
+
+        assert_eq!(result, EmbedJobResult::Cancelled);
+        let unprocessed = get_primary_embedding(&conn, "node_test_2", TEST_MODEL)?
+            .ok_or("expected unprocessed node embedding to remain")?;
+        assert_eq!(unprocessed, vec![9.0; TEST_DIMS]);
+        Ok(())
+    }
+
+    #[test]
     fn test_inference_failure_preserves_existing_embedding(
     ) -> Result<(), Box<dyn std::error::Error>> {
         let conn = setup_job_db()?;

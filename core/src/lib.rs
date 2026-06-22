@@ -1,14 +1,14 @@
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chat::ChatMessage;
 use rusqlite::OptionalExtension;
 use rusqlite::{params, Connection, Row};
 use serde::Serialize;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 mod auth;
 mod chat;
@@ -25,6 +25,7 @@ use ipc_types::{
     NodeUpdateInput, OnboardingNodeCommitInput, OnboardingProposedNode, Tag, TagCreateInput, Vault,
     VaultCreateInput, VaultUpdateInput,
 };
+pub use ipc_types::{EmbeddingReembedInput, EmbeddingStatus};
 
 // MARK: Internal Types and Constants
 
@@ -949,8 +950,7 @@ fn run_priority_refresh(db_path: &std::path::Path) -> Result<usize, String> {
 pub(crate) struct DbState {
     pub(crate) db_path: PathBuf,
     pub(crate) redacted_session_key: Mutex<Option<redacted::SessionKey>>,
-    #[allow(dead_code)]
-    pub(crate) embed_job: Mutex<Option<embed::EmbedJobHandle>>,
+    pub(crate) embed_job: Arc<Mutex<Option<embed::EmbedJobHandle>>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1004,6 +1004,44 @@ pub fn check_rate_limit(key: &str) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn with_embed_job_lock<T, F>(
+    embed_job: &Arc<Mutex<Option<embed::EmbedJobHandle>>>,
+    f: F,
+) -> Result<T, String>
+where
+    F: FnOnce(&mut Option<embed::EmbedJobHandle>) -> T,
+{
+    let mut guard = embed_job
+        .lock()
+        .map_err(|_| "Embedding job state lock is poisoned; restart the app.".to_string())?;
+    Ok(f(&mut guard))
+}
+
+pub fn build_embedding_status(
+    conn: &Connection,
+    reembed_in_progress: bool,
+) -> Result<EmbeddingStatus, String> {
+    let settings = embed::get_embedding_settings(conn)?;
+    let (embedded, total) = embed::storage::count_coverage(conn, &settings.model)?;
+    let coverage_percent = if total == 0 {
+        0.0
+    } else {
+        (embedded as f64 / total as f64) * 100.0
+    };
+    let jaccard_fallback_active = settings.backend.eq_ignore_ascii_case("onnx")
+        && build_embed_engine_from_settings(conn).is_err();
+
+    Ok(EmbeddingStatus {
+        model: settings.model,
+        tier: settings.tier,
+        backend: settings.backend,
+        coverage_percent,
+        last_computed_at: settings.last_computed_at,
+        jaccard_fallback_active,
+        reembed_in_progress,
+    })
 }
 
 fn build_embed_engine_from_settings(
@@ -1073,6 +1111,24 @@ fn spawn_single_node_embedding(db_path: PathBuf, node_id: String) {
             }
         }
     });
+}
+
+fn clear_matching_embed_job(
+    embed_job: &Arc<Mutex<Option<embed::EmbedJobHandle>>>,
+    cancel: &Arc<AtomicBool>,
+) {
+    match embed_job.lock() {
+        Ok(mut guard) => {
+            if let Some(active_handle) = guard.as_ref() {
+                if Arc::ptr_eq(&active_handle.cancel, cancel) {
+                    *guard = None;
+                }
+            }
+        }
+        Err(_) => {
+            eprintln!("[re-embed] embed_job lock poisoned during worker cleanup");
+        }
+    }
 }
 
 pub fn is_node_private(conn: &Connection, node_id: &str) -> Result<bool, String> {
@@ -1419,7 +1475,7 @@ pub fn run() {
             app.manage(DbState {
                 db_path: db_path.clone(),
                 redacted_session_key: Mutex::new(None),
-                embed_job: Mutex::new(None),
+                embed_job: Arc::new(Mutex::new(None)),
             });
 
             let bg_path = db_path;
@@ -1445,6 +1501,9 @@ pub fn run() {
             db_ping,
             settings_get,
             settings_set,
+            embedding_get_status,
+            embedding_reembed_start,
+            embedding_reembed_cancel,
             chat_get_history,
             chat_append_message,
             chat_clear_history,
@@ -1825,10 +1884,51 @@ pub async fn test_helper_memory_extract_force(
     app.manage(AppState {
         db_path,
         redacted_session_key: std::sync::Mutex::new(None),
-        embed_job: std::sync::Mutex::new(None),
+        embed_job: Arc::new(std::sync::Mutex::new(None)),
     });
     let state = app.state::<AppState>();
     memory_extract_force(provider, endpoint, model, state).await
+}
+
+pub fn test_helper_init_embedding_db(db_path: std::path::PathBuf) -> Result<(), String> {
+    let mut conn = open_connection(&db_path)?;
+    run_migrations(&mut conn)?;
+    run_seed_data(&mut conn)
+}
+
+pub fn test_helper_embedding_get_status(
+    db_path: std::path::PathBuf,
+) -> Result<EmbeddingStatus, String> {
+    use tauri::Manager;
+    let app = tauri::test::mock_app();
+    app.manage(AppState {
+        db_path,
+        redacted_session_key: std::sync::Mutex::new(None),
+        embed_job: Arc::new(std::sync::Mutex::new(None)),
+    });
+    let state = app.state::<AppState>();
+    match embedding_get_status(state) {
+        IpcResponse::Ok { ok } => Ok(ok),
+        IpcResponse::Err { err } => Err(err),
+    }
+}
+
+pub fn test_helper_embedding_reembed_cancel(db_path: std::path::PathBuf) -> Result<bool, String> {
+    use tauri::Manager;
+    let cancel = Arc::new(AtomicBool::new(false));
+    let app = tauri::test::mock_app();
+    app.manage(AppState {
+        db_path,
+        redacted_session_key: std::sync::Mutex::new(None),
+        embed_job: Arc::new(std::sync::Mutex::new(Some(embed::EmbedJobHandle {
+            cancel: Arc::clone(&cancel),
+        }))),
+    });
+    let state = app.state::<AppState>();
+    match embedding_reembed_cancel(state) {
+        IpcResponse::Ok { ok: () } => Ok(cancel.load(Ordering::Relaxed)),
+        IpcResponse::Err { err } => Err(err),
+    }
 }
 
 // MARK: Tauri Commands
@@ -2054,6 +2154,131 @@ fn settings_set(
         .map_err(|err| format!("Failed writing setting: {err}"))?;
         Ok(true)
     })())
+}
+
+#[tauri::command]
+fn embedding_get_status(state: tauri::State<'_, AppState>) -> IpcResponse<EmbeddingStatus> {
+    into_ipc((|| {
+        let reembed_in_progress = with_embed_job_lock(&state.embed_job, |slot| slot.is_some())?;
+        let conn = open_connection(&state.db_path)?;
+        build_embedding_status(&conn, reembed_in_progress)
+    })())
+}
+
+#[tauri::command]
+fn embedding_reembed_start(
+    state: tauri::State<'_, AppState>,
+    app_handle: tauri::AppHandle,
+    payload: EmbeddingReembedInput,
+) -> IpcResponse<()> {
+    into_ipc((|| {
+        check_rate_limit("embedding")?;
+        embed::validate_reembed_input(&payload)?;
+
+        let mut conn = open_connection(&state.db_path)?;
+        let old_model_id = {
+            let tx = conn
+                .transaction()
+                .map_err(|err| format!("Failed starting embedding settings transaction: {err}"))?;
+            let old_model = embed::get_embedding_settings(&tx)?.model;
+
+            embed::set_embedding_model(&tx, payload.model.trim())?;
+            embed::set_embedding_tier(&tx, &payload.tier.trim().to_ascii_lowercase())?;
+            embed::set_embedding_backend(&tx, &payload.backend.trim().to_ascii_lowercase())?;
+
+            build_embed_engine_from_settings(&tx)
+                .map_err(|err| format!("Failed to initialize embedding engine: {err}"))?;
+
+            tx.commit()
+                .map_err(|err| format!("Failed committing embedding settings: {err}"))?;
+            old_model
+        };
+
+        let embed_job = Arc::clone(&state.embed_job);
+        with_embed_job_lock(&embed_job, |slot| {
+            if let Some(old_handle) = slot.as_ref() {
+                old_handle.cancel.store(true, Ordering::Relaxed);
+            }
+        })?;
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        with_embed_job_lock(&embed_job, |slot| {
+            *slot = Some(embed::EmbedJobHandle {
+                cancel: Arc::clone(&cancel),
+            });
+        })?;
+
+        if let Ok(status) = build_embedding_status(&conn, true) {
+            let _emit_result = app_handle.emit("embedding-status-changed", status);
+        }
+
+        let db_path = state.db_path.clone();
+        let app_handle_clone = app_handle.clone();
+        let embed_job_worker = Arc::clone(&embed_job);
+        let worker_cancel = Arc::clone(&cancel);
+        let worker_old_model = old_model_id;
+        let worker_new_model = payload.model.clone();
+
+        tauri::async_runtime::spawn_blocking(move || {
+            let conn = match open_connection(&db_path) {
+                Ok(conn) => conn,
+                Err(err) => {
+                    eprintln!("[re-embed] Failed to open background connection: {err}");
+                    clear_matching_embed_job(&embed_job_worker, &worker_cancel);
+                    return;
+                }
+            };
+
+            let engine = match build_embed_engine_from_settings(&conn) {
+                Ok(engine) => engine,
+                Err(err) => {
+                    eprintln!("[re-embed] Failed to build engine in worker: {err}");
+                    clear_matching_embed_job(&embed_job_worker, &worker_cancel);
+                    if let Ok(status) = build_embedding_status(&conn, false) {
+                        let _emit_result =
+                            app_handle_clone.emit("embedding-status-changed", status);
+                    }
+                    return;
+                }
+            };
+
+            let old_model_arg = if worker_old_model != worker_new_model {
+                Some(worker_old_model.as_str())
+            } else {
+                None
+            };
+            let result =
+                embed::embed_all_nodes(&conn, engine.as_ref(), &worker_cancel, old_model_arg);
+            match result {
+                embed::EmbedJobResult::Completed { nodes_embedded } => {
+                    eprintln!("[re-embed] completed: embedded {nodes_embedded} node(s)");
+                }
+                embed::EmbedJobResult::Cancelled => {
+                    eprintln!("[re-embed] cancelled");
+                }
+                embed::EmbedJobResult::Failed(err) => {
+                    eprintln!("[re-embed] failed: {err}");
+                }
+            }
+
+            clear_matching_embed_job(&embed_job_worker, &worker_cancel);
+
+            if let Ok(status) = build_embedding_status(&conn, false) {
+                let _emit_result = app_handle_clone.emit("embedding-status-changed", status);
+            }
+        });
+
+        Ok(())
+    })())
+}
+
+#[tauri::command]
+fn embedding_reembed_cancel(state: tauri::State<'_, AppState>) -> IpcResponse<()> {
+    into_ipc(with_embed_job_lock(&state.embed_job, |slot| {
+        if let Some(handle) = slot.as_ref() {
+            handle.cancel.store(true, Ordering::Relaxed);
+        }
+    }))
 }
 
 #[tauri::command]

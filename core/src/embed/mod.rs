@@ -16,9 +16,10 @@ pub use chunking::{chunk_node_text, ChunkSpec};
 pub use config::{
     chunking_config_for_settings, default_embedding_settings, get_embedding_settings,
     get_local_model_endpoint, seed_embedding_defaults, set_embedding_backend,
-    set_embedding_last_computed_at, set_embedding_model, set_embedding_tier, EmbeddingSettings,
-    DEFAULT_LOCAL_MODEL_ENDPOINT, EMBEDDING_BACKEND_KEY, EMBEDDING_LAST_COMPUTED_AT_KEY,
-    EMBEDDING_MODEL_KEY, EMBEDDING_TIER_KEY, LOCAL_MODEL_ENDPOINT_KEY,
+    set_embedding_last_computed_at, set_embedding_model, set_embedding_tier,
+    validate_reembed_input, EmbeddingSettings, DEFAULT_LOCAL_MODEL_ENDPOINT, EMBEDDING_BACKEND_KEY,
+    EMBEDDING_LAST_COMPUTED_AT_KEY, EMBEDDING_MODEL_KEY, EMBEDDING_TIER_KEY,
+    LOCAL_MODEL_ENDPOINT_KEY,
 };
 pub use engine::{normalize_all, EmbedEngine, EmbedError};
 pub use job::{
