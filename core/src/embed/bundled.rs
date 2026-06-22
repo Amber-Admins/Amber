@@ -85,9 +85,10 @@ impl BundledEmbedEngine {
     }
 
     fn tokenize(&self, texts: &[String]) -> Result<TokenizedBatch, EmbedError> {
+        let input_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
         let encodings = self
             .tokenizer
-            .encode_batch(texts.to_vec(), true)
+            .encode_batch(input_refs, true)
             .map_err(|err| EmbedError::InferenceFailed(format!("tokenization failed: {}", err)))?;
 
         let batch_size = encodings.len();
