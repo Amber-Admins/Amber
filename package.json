@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "preflight": "node scripts/preflight.mjs",
     "preflight:fix": "node scripts/preflight.mjs --fix",
-    "license-check": "license-checker-rseidelsohn --production --excludePrivate --onlyAllow \"MIT;ISC;BSD-3-Clause;BSD-2-Clause;Apache-2.0;Unlicense;MPL-2.0\""
+    "license-check": "license-checker-rseidelsohn --production --excludePrivate --onlyAllow \"MIT;ISC;BSD-3-Clause;BSD-2-Clause;Apache-2.0;Unlicense;MPL-2.0\"",
+    "test": "npx tsx scripts/test-frontend.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
