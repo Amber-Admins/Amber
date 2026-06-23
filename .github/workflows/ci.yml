@@ -32,6 +32,15 @@ jobs:
       - name: Type check
         run: npx tsc --noEmit
 
+      - name: Build frontend
+        run: npm run build
+
+      - name: Check bundle size
+        run: npx size-limit
+
+      - name: Check frontend licenses
+        run: npm run license-check
+
   backend:
     name: Backend Lint & Test
     runs-on: ubuntu-latest
@@ -66,3 +75,15 @@ jobs:
 
       - name: Run tests
         run: cargo test
+
+      - name: Install cargo-tarpaulin
+        uses: taiki-e/install-action@cargo-tarpaulin
+
+      - name: Code coverage
+        run: cargo tarpaulin --out Xml --output-dir coverage/
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./core/coverage/cobertura.xml
+          fail_ci_if_error: false
