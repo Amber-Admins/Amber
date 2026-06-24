@@ -137,7 +137,7 @@ fn best_match_via_embeddings(
         .first()
         .ok_or_else(|| "Embedding engine returned no candidate vector".to_string())?;
 
-    let matches = find_top_n_similar(conn, query_vector, engine.model_id(), 10)?;
+    let matches = find_top_n_similar(conn, query_vector, engine.model_id(), 50)?;
     for (node_id, score) in matches {
         if let Some(node) = fetch_node_for_similarity(conn, &node_id)? {
             if !has_context || relevant_vaults.contains(&node.vault_id) {
