@@ -6,7 +6,7 @@ import {
   getPriorityProfile,
   isFrozen,
   getAccessCount,
-} from "./PriorityDashboard";
+} from "../utils/priority";
 import type { Node } from "../ipc";
 
 // Helper to construct a compliant mock Node
