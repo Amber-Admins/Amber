@@ -129,7 +129,17 @@ fn best_match_via_embeddings(
     relevant_vaults: &HashSet<String>,
     has_context: bool,
 ) -> Result<Option<(DbNode, f64)>, String> {
-    let matches = find_top_n_similar(conn, query_vector, model_id, 50)?;
+    let matches = find_top_n_similar(
+        conn,
+        query_vector,
+        model_id,
+        50,
+        if has_context {
+            Some(relevant_vaults)
+        } else {
+            None
+        },
+    )?;
     for (node_id, score) in matches {
         if let Some(node) = fetch_node_for_similarity(conn, &node_id)? {
             if !has_context || relevant_vaults.contains(&node.vault_id) {

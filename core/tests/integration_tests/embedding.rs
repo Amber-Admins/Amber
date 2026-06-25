@@ -175,7 +175,8 @@ fn test_cosine_search_ranking() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     let query_vector = vec![1.0, 0.0];
-    let matches = mindvault_lib::embed::find_top_n_similar(&conn, &query_vector, "fake-model", 3)?;
+    let matches =
+        mindvault_lib::embed::find_top_n_similar(&conn, &query_vector, "fake-model", 3, None)?;
 
     assert_eq!(matches.len(), 3);
     assert_eq!(matches[0].0, "node_2");
