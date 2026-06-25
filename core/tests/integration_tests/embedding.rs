@@ -195,10 +195,7 @@ fn test_cosine_search_ranking() -> Result<(), Box<dyn std::error::Error>> {
 #[test]
 fn test_compute_text_similarity_falls_back_without_engine() -> Result<(), Box<dyn std::error::Error>>
 {
-    let conn = rusqlite::Connection::open_in_memory()?;
-
     let score = mindvault_lib::memory_agent::similarity::compute_text_similarity(
-        &conn,
         "apple banana",
         "banana orange",
         None,

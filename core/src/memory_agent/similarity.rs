@@ -1,5 +1,4 @@
 use crate::embed::{cosine_similarity, EmbedEngine};
-use rusqlite::Connection;
 use std::collections::HashSet;
 
 pub const STOPWORDS: &[&str] = &[
@@ -241,7 +240,6 @@ fn cosine_via_embed(
 /// Uses embedding cosine similarity when an engine is available, falling back to
 /// Jaccard token overlap when embeddings are unavailable.
 pub fn compute_text_similarity(
-    _conn: &Connection,
     candidate_text: &str,
     existing_text: &str,
     engine: Option<&dyn EmbedEngine>,
@@ -292,84 +290,64 @@ mod tests {
         }
     }
 
-    fn setup_conn() -> Connection {
-        match Connection::open_in_memory() {
-            Ok(conn) => conn,
-            Err(err) => panic!("Failed to open test DB: {err}"),
-        }
-    }
-
     #[test]
     fn test_identical_strings() {
-        let conn = setup_conn();
         let text = "MindVault is a local first secure personal knowledge base";
-        let score = compute_text_similarity(&conn, text, text, None);
+        let score = compute_text_similarity(text, text, None);
         assert!((score - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_disjoint_strings() {
-        let conn = setup_conn();
         let a = "apple orange banana";
         let b = "computer keyboard mouse";
-        let score = compute_text_similarity(&conn, a, b, None);
+        let score = compute_text_similarity(a, b, None);
         assert!(score < f64::EPSILON);
     }
 
     #[test]
     fn test_partial_overlap() {
-        let conn = setup_conn();
         // "learning Rust is fun" -> tokenize -> {"learning", "rust", "fun"} (3 words)
         // "learning Python is fun" -> tokenize -> {"learning", "python", "fun"} (3 words)
         // Intersection -> {"learning", "fun"} (2 words)
         // Union -> {"learning", "rust", "python", "fun"} (4 words)
         // Expected Jaccard -> 2 / 4 = 0.50
-        let score = compute_text_similarity(
-            &conn,
-            "learning Rust is fun",
-            "learning Python is fun",
-            None,
-        );
+        let score = compute_text_similarity("learning Rust is fun", "learning Python is fun", None);
         assert!((score - 0.50).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_empty_inputs() {
-        let conn = setup_conn();
         let engine = FakeEmbedEngine;
-        assert!(compute_text_similarity(&conn, "", "test", None) < f64::EPSILON);
-        assert!(compute_text_similarity(&conn, "test", "", None) < f64::EPSILON);
-        assert!(compute_text_similarity(&conn, "", "", None) < f64::EPSILON);
+        assert!(compute_text_similarity("", "test", None) < f64::EPSILON);
+        assert!(compute_text_similarity("test", "", None) < f64::EPSILON);
+        assert!(compute_text_similarity("", "", None) < f64::EPSILON);
 
-        assert!(compute_text_similarity(&conn, "", "test", Some(&engine)) < f64::EPSILON);
-        assert!(compute_text_similarity(&conn, "test", "", Some(&engine)) < f64::EPSILON);
-        assert!(compute_text_similarity(&conn, "", "", Some(&engine)) < f64::EPSILON);
+        assert!(compute_text_similarity("", "test", Some(&engine)) < f64::EPSILON);
+        assert!(compute_text_similarity("test", "", Some(&engine)) < f64::EPSILON);
+        assert!(compute_text_similarity("", "", Some(&engine)) < f64::EPSILON);
     }
 
     #[test]
     fn test_case_insensitivity() {
-        let conn = setup_conn();
-        let score = compute_text_similarity(&conn, "LEARNING RUST", "learning rust", None);
+        let score = compute_text_similarity("LEARNING RUST", "learning rust", None);
         assert!((score - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_stopword_filtering() {
-        let conn = setup_conn();
         // "about a the learning" -> stopwords filtered -> {"learning"}
         // "learning" -> {"learning"}
         // Expected Jaccard -> 1.0
-        let score = compute_text_similarity(&conn, "about a the learning", "learning", None);
+        let score = compute_text_similarity("about a the learning", "learning", None);
         assert!((score - 1.0).abs() < f64::EPSILON);
     }
 
     #[test]
     fn test_compute_text_similarity_uses_cosine_when_engine_available() {
-        let conn = setup_conn();
         let engine = FakeEmbedEngine;
 
         let score = compute_text_similarity(
-            &conn,
             "semantic match candidate",
             "semantic match existing",
             Some(&engine),
