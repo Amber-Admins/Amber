@@ -215,6 +215,7 @@ Amber uses a single cross-platform preflight gate that matches CI.
 
 ```bash
 # Auto-fix formatting first (recommended)
+# If your screen freezes during running headless Chrome use the Windows Key + Ctrl + Shift + B shortcut immediately resets your graphics driver and refreshes your display.
 npm run preflight:fix
 
 # Then commit

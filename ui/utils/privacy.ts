@@ -32,6 +32,13 @@ export function isRedactedLocked(tier?: string | null, isUnlocked = false): bool
   return normalizeTier(tier) === "redacted" && !isUnlocked;
 }
 
+export function shouldOmitSpatialConnector(
+  effectiveTier: string,
+  isRedactedUnlocked: boolean
+): boolean {
+  return isRedactedLocked(effectiveTier, isRedactedUnlocked);
+}
+
 export function getPrivacyDisplayLabel(
   label: string,
   tier?: string | null,

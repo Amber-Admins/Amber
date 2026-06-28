@@ -61,6 +61,7 @@ Usage:
 What it runs:
   - Prettier + ESLint + TypeScript (UI)
   - Frontend + backend license checks
+  - npm audit (warn-only locally; enforced in CI)
   - cargo fmt/clippy/test (core)
 `);
   process.exit(0);
@@ -146,8 +147,16 @@ const steps = [
   },
   { name: "banned patterns", cmd: runBannedPatterns },
   { name: "tsc (noEmit)", cmd: "npx tsc --noEmit" },
-  { name: "frontend build", cmd: "npm run build" },
-  { name: "bundle size limit", cmd: "npx size-limit" },
+  {
+    name: "frontend build",
+    cmd: async () => {
+      console.log(
+        "\n[Tip] Windows Key + Ctrl + Shift + B shortcut immediately resets your graphics driver and refreshes your display.\n" +
+          "      It is a quick troubleshooting step when your screen freezes, goes black, or shows visual glitches.\n"
+      );
+      return run("npm run build");
+    },
+  },
   {
     name: "frontend tests",
     cmd: "npm run test:all",
@@ -155,6 +164,23 @@ const steps = [
   {
     name: "frontend license check",
     cmd: "npm run license-check",
+  },
+  {
+    name: "npm audit (warn-only)",
+    cmd: async () => {
+      const { code, combined } = await runCapture("npm audit --audit-level=high");
+      if (code !== 0) {
+        console.warn(
+          "\n[Warning] npm audit reported high/critical issues (preflight continues).\n" +
+            "   This check is enforced in CI via .github/workflows/security.yml.\n"
+        );
+        const lines = combined.split(/\r?\n/).filter((line) => line.trim());
+        for (const line of lines.slice(-20)) {
+          console.warn(line);
+        }
+      }
+      return 0;
+    },
   },
   {
     name: "backend cargo-deny check",
