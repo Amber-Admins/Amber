@@ -3115,6 +3115,11 @@ fn vault_update(input: VaultUpdateInput, state: tauri::State<'_, DbState>) -> Ip
             None,
             parent_tier.as_deref(),
         );
+        let current_effective_privacy = privacy::get_effective_privacy(
+            Some(current_privacy_tier.as_str()),
+            None,
+            parent_tier.as_deref(),
+        );
         let should_encrypt = next_effective_privacy == "redacted";
         let current_is_encrypted = tx
             .query_row(
@@ -3220,8 +3225,36 @@ fn vault_update(input: VaultUpdateInput, state: tauri::State<'_, DbState>) -> Ip
             .map_err(|err| format!("Failed updating sub-vault: {err}"))?;
         }
 
+        let affected_node_ids = if next_effective_privacy != current_effective_privacy {
+            let mut stmt = if affected_vaults > 0 {
+                tx.prepare("SELECT id FROM nodes WHERE vault_id = ?1 AND deleted_at IS NULL;")
+            } else {
+                tx.prepare("SELECT id FROM nodes WHERE sub_vault_id = ?1 AND deleted_at IS NULL;")
+            }
+            .map_err(|err| format!("Failed preparing node query: {err}"))?;
+
+            let rows = stmt
+                .query_map([&vault_id], |row| row.get::<_, String>(0))
+                .map_err(|err| format!("Failed querying node IDs: {err}"))?;
+
+            let mut ids = Vec::new();
+            for r in rows {
+                ids.push(r.map_err(|err| format!("Failed to read node ID: {err}"))?);
+            }
+            ids
+        } else {
+            Vec::new()
+        };
+
         tx.commit()
             .map_err(|err| format!("Failed committing vault_update: {err}"))?;
+
+        if !affected_node_ids.is_empty() {
+            let is_unlocked = session_key.is_some();
+            for node_id in affected_node_ids {
+                spawn_single_node_embedding(state.db_path.clone(), node_id, is_unlocked);
+            }
+        }
 
         fetch_vault_by_id(&conn, &vault_id, session_key)
     })())
@@ -3586,6 +3619,12 @@ fn node_update(input: NodeUpdateInput, state: tauri::State<'_, DbState>) -> IpcR
         let current_title = current.title.clone();
         let current_summary = current.summary.clone();
         let current_detail = current.detail.clone();
+        let current_effective_privacy = resolve_node_effective_privacy(
+            &tx,
+            &current.vault_id,
+            current.sub_vault_id.as_deref(),
+            current.privacy_tier.as_deref(),
+        )?;
 
         let next_vault_id = input.vault_id.unwrap_or(current.vault_id);
         let next_sub_vault_id = input.sub_vault_id.or(current.sub_vault_id);
@@ -3634,6 +3673,8 @@ fn node_update(input: NodeUpdateInput, state: tauri::State<'_, DbState>) -> IpcR
             current_detail.as_deref(),
             current_is_encrypted,
             should_encrypt,
+            &current_effective_privacy,
+            &effective_privacy,
             &next_title,
             &next_summary,
             next_detail.as_deref(),

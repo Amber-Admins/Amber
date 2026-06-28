@@ -18,8 +18,6 @@ pub struct EmbedJobHandle {
     pub cancel: Arc<AtomicBool>,
 }
 
-/// Helper to determine if the stored text columns (title, summary, detail) will change
-/// during a node update, considering the transition in encryption/redaction states.
 #[allow(clippy::too_many_arguments)]
 pub fn stored_text_columns_changed(
     current_title: &str,
@@ -27,16 +25,19 @@ pub fn stored_text_columns_changed(
     current_detail: Option<&str>,
     current_is_encrypted: bool,
     should_encrypt: bool,
+    current_effective_privacy: &str,
+    next_effective_privacy: &str,
     next_title: &str,
     next_summary: &str,
     next_detail: Option<&str>,
 ) -> bool {
+    let privacy_tier_changed = current_effective_privacy != next_effective_privacy;
     let encryption_state_changed = should_encrypt != current_is_encrypted;
     let content_changed = !should_encrypt
         && (next_title != current_title
             || next_summary != current_summary
             || next_detail != current_detail);
-    encryption_state_changed || content_changed
+    privacy_tier_changed || encryption_state_changed || content_changed
 }
 
 fn is_local_endpoint(endpoint: &str) -> bool {
@@ -728,6 +729,8 @@ mod tests {
             Some("Detail"),
             false,
             false,
+            "open",
+            "open",
             "Title",
             "Summary",
             Some("Detail")
@@ -740,6 +743,8 @@ mod tests {
             Some("Detail"),
             false,
             false,
+            "open",
+            "open",
             "Title 2",
             "Summary",
             Some("Detail")
@@ -750,6 +755,8 @@ mod tests {
             Some("Detail"),
             false,
             false,
+            "open",
+            "open",
             "Title",
             "Summary 2",
             Some("Detail")
@@ -760,6 +767,8 @@ mod tests {
             Some("Detail"),
             false,
             false,
+            "open",
+            "open",
             "Title",
             "Summary",
             Some("Detail 2")
@@ -770,6 +779,8 @@ mod tests {
             Some("Detail"),
             false,
             false,
+            "open",
+            "open",
             "Title",
             "Summary",
             None
@@ -782,6 +793,8 @@ mod tests {
             Some("Detail"),
             false,
             true,
+            "open",
+            "redacted",
             "Title",
             "Summary",
             Some("Detail")
@@ -794,6 +807,8 @@ mod tests {
             Some("Detail"),
             true,
             false,
+            "redacted",
+            "open",
             "Title",
             "Summary",
             Some("Detail")
@@ -806,6 +821,8 @@ mod tests {
             Some("Detail"),
             true,
             true,
+            "redacted",
+            "redacted",
             "Title",
             "Summary",
             Some("Detail")
@@ -817,9 +834,39 @@ mod tests {
             Some("Detail"),
             true,
             true,
+            "redacted",
+            "redacted",
             "Changed Title",
             "Changed Summary",
             Some("Changed Detail")
+        ));
+
+        // Scenario 6: Privacy tier changes (open -> locked), text remains same
+        assert!(stored_text_columns_changed(
+            "Title",
+            "Summary",
+            Some("Detail"),
+            false,
+            false,
+            "open",
+            "locked",
+            "Title",
+            "Summary",
+            Some("Detail")
+        ));
+
+        // Scenario 7: Privacy tier stays locked, text remains same
+        assert!(!stored_text_columns_changed(
+            "Title",
+            "Summary",
+            Some("Detail"),
+            false,
+            false,
+            "locked",
+            "locked",
+            "Title",
+            "Summary",
+            Some("Detail")
         ));
     }
 

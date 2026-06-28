@@ -251,6 +251,57 @@ fn assert_invalidation_trigger_covers_fields(
             || sql_upper.contains("NEW.DETAIL IS NOT OLD.DETAIL"),
         "Trigger missing detail change check"
     );
+    assert!(
+        sql_upper.contains("NEW.PRIVACY_TIER != OLD.PRIVACY_TIER")
+            || sql_upper.contains("NEW.PRIVACY_TIER <> OLD.PRIVACY_TIER")
+            || sql_upper.contains("NEW.PRIVACY_TIER IS NOT OLD.PRIVACY_TIER"),
+        "Trigger missing privacy_tier change check"
+    );
+    assert!(
+        sql_upper.contains("NEW.VAULT_ID != OLD.VAULT_ID")
+            || sql_upper.contains("NEW.VAULT_ID <> OLD.VAULT_ID")
+            || sql_upper.contains("NEW.VAULT_ID IS NOT OLD.VAULT_ID"),
+        "Trigger missing vault_id change check"
+    );
+    assert!(
+        sql_upper.contains("NEW.SUB_VAULT_ID != OLD.SUB_VAULT_ID")
+            || sql_upper.contains("NEW.SUB_VAULT_ID <> OLD.SUB_VAULT_ID")
+            || sql_upper.contains("NEW.SUB_VAULT_ID IS NOT OLD.SUB_VAULT_ID"),
+        "Trigger missing sub_vault_id change check"
+    );
+
+    // Verify the vault update trigger
+    let (v_name, v_sql): (String, String) = conn
+        .query_row(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_invalidate_embedding_on_vault_update';",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+    assert_eq!(v_name, "trg_invalidate_embedding_on_vault_update");
+    let v_sql_upper = v_sql.to_uppercase();
+    assert!(
+        v_sql_upper.contains("NEW.PRIVACY_TIER IS NOT OLD.PRIVACY_TIER")
+            || v_sql_upper.contains("NEW.PRIVACY_TIER != OLD.PRIVACY_TIER")
+            || v_sql_upper.contains("NEW.PRIVACY_TIER <> OLD.PRIVACY_TIER"),
+        "Vault trigger missing privacy_tier check"
+    );
+
+    // Verify the sub-vault update trigger
+    let (sv_name, sv_sql): (String, String) = conn
+        .query_row(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'trigger' AND name = 'trg_invalidate_embedding_on_sub_vault_update';",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+    assert_eq!(sv_name, "trg_invalidate_embedding_on_sub_vault_update");
+    let sv_sql_upper = sv_sql.to_uppercase();
+    assert!(
+        sv_sql_upper.contains("NEW.PRIVACY_TIER IS NOT OLD.PRIVACY_TIER")
+            || sv_sql_upper.contains("NEW.PRIVACY_TIER != OLD.PRIVACY_TIER")
+            || sv_sql_upper.contains("NEW.PRIVACY_TIER <> OLD.PRIVACY_TIER"),
+        "Sub-vault trigger missing privacy_tier check"
+    );
+
     Ok(())
 }
 
