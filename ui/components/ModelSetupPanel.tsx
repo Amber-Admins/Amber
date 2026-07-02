@@ -152,10 +152,10 @@ function ModelSetupPanel({ variant = "settings", onStackSelected }: ModelSetupPa
     try {
       await startStackDownload(stackId);
       setToastMessage("Coming soon: download IPC is not wired yet.");
+      setBusyStackId(null);
       onStackSelected?.(stackId);
     } catch (error) {
       setToastMessage(error instanceof Error ? error.message : String(error));
-    } finally {
       setBusyStackId(null);
     }
   }
