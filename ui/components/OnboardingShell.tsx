@@ -22,7 +22,10 @@ type OnboardingShellProps = {
   errorMessage: string | null;
 };
 
-const STEPS = ["Basics", "LLM setup", "Review"] as const;
+const STEPS = ["Model Setup", "Basics", "LLM setup", "Review"] as const;
+const MODEL_SETUP_STEP_INDEX = 0;
+const BASICS_STEP_INDEX = 1;
+const LLM_STEP_INDEX = 2;
 const REVIEW_STEP_INDEX = STEPS.indexOf("Review");
 
 type Provider = "ollama" | "lmstudio";
@@ -66,10 +69,13 @@ const QUESTION_FIELDS: Array<{
 ];
 
 function stepDescription(step: number, stagedCount: number): string {
-  if (step === 0) {
+  if (step === MODEL_SETUP_STEP_INDEX) {
+    return "Check your hardware and pick the best local model path. You can skip this and configure it later.";
+  }
+  if (step === BASICS_STEP_INDEX) {
     return "Answer fixed onboarding questions. This data is sent when you proceed to Review.";
   }
-  if (step === 1) {
+  if (step === LLM_STEP_INDEX) {
     return "Configure the same provider/endpoint/model used by chat. Extraction runs when you move to Review.";
   }
   return `Review/edit staged proposals before commit. Currently staged: ${stagedCount}.`;
@@ -448,7 +454,16 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
         <div className="onboarding-content">
           <h2>{heading}</h2>
           <p>{description}</p>
-          {currentStep === 0 ? (
+          {currentStep === MODEL_SETUP_STEP_INDEX ? (
+            <div className="onboarding-llm-grid">
+              <ModelSetupPanel variant="onboarding" onStackSelected={() => void goNext()} />
+              <div className="onboarding-hint">
+                Pick a recommended stack to continue, or use the skip button below if you want to
+                set this up later.
+              </div>
+            </div>
+          ) : null}
+          {currentStep === BASICS_STEP_INDEX ? (
             <div className="onboarding-form-grid">
               {QUESTION_FIELDS.map((field) => (
                 <label className="onboarding-field" key={field.key}>
@@ -474,9 +489,8 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
               ))}
             </div>
           ) : null}
-          {currentStep === 1 ? (
+          {currentStep === LLM_STEP_INDEX ? (
             <div className="onboarding-llm-grid">
-              <ModelSetupPanel variant="onboarding" onStackSelected={() => void goNext()} />
               <details className="onboarding-advanced-details">
                 <summary>Advanced LLM settings</summary>
                 <div className="provider-toggle" role="radiogroup" aria-label="LLM provider">
@@ -689,7 +703,11 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
             onClick={() => void goNext()}
             disabled={shellBusy || (isLastStep && unresolvedCount > 0)}
           >
-            {isLastStep ? "Commit and finish onboarding" : "Next"}
+            {currentStep === MODEL_SETUP_STEP_INDEX
+              ? "I’ll set this up later"
+              : isLastStep
+                ? "Commit and finish onboarding"
+                : "Next"}
           </button>
         </footer>
       </div>
