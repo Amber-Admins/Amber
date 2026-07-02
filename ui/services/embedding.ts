@@ -1,4 +1,4 @@
-import type { EmbeddingStatus } from "../types/generated";
+import type { EmbeddingReembedInput, EmbeddingStatus } from "../types/generated";
 import { invokeTyped } from "../ipc";
 import { unwrapIpcResult } from "./ipcResult.ts";
 
@@ -12,7 +12,7 @@ const MOCK_STATUS: EmbeddingStatus = {
   reembedInProgress: false,
 };
 
-const USE_MOCK = import.meta.env.VITE_USE_EMBED_MOCK !== "false"; // default: mock ON; Commit 16 sets VITE_USE_EMBED_MOCK=false in .env.development
+const USE_MOCK = import.meta.env.VITE_USE_EMBED_MOCK === "true";
 
 export async function getEmbeddingStatus(): Promise<EmbeddingStatus> {
   if (USE_MOCK) return MOCK_STATUS;
@@ -20,9 +20,9 @@ export async function getEmbeddingStatus(): Promise<EmbeddingStatus> {
   return status;
 }
 
-export async function startReembed(): Promise<void> {
+export async function startReembed(payload: EmbeddingReembedInput): Promise<void> {
   if (USE_MOCK) return;
-  await unwrapIpcResult(invokeTyped<void>("embedding_reembed_start"));
+  await unwrapIpcResult(invokeTyped<void>("embedding_reembed_start", { payload }));
 }
 
 export async function cancelReembed(): Promise<void> {

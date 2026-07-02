@@ -684,7 +684,14 @@ function LlmSettings() {
             syncState={embeddingSyncState}
             syncError={embeddingSyncError}
             onReembed={() => {
-              void runEmbeddingAction(startReembed);
+              if (!embeddingStatus) return;
+              void runEmbeddingAction(() =>
+                startReembed({
+                  model: embeddingStatus.model,
+                  tier: embeddingStatus.tier,
+                  backend: embeddingStatus.backend,
+                })
+              );
             }}
             onCancelReembed={() => {
               void runEmbeddingAction(cancelReembed);
