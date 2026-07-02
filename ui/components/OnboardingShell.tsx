@@ -434,6 +434,12 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
     } else {
       setLmStudioEndpoint(lmStudioEndpoint);
     }
+    if (currentStep === LLM_STEP_INDEX) {
+      setLlmProvider(provider);
+      if (selectedModel.trim()) {
+        setLlmModel(provider, selectedModel.trim());
+      }
+    }
     if (isLastStep) {
       await commitOnboardingAndFinish();
       return;
