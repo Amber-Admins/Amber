@@ -242,6 +242,11 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
   }
 
   async function testConnectionAndFetchModels() {
+    if (provider === "ollama") {
+      setOllamaEndpoint(ollamaEndpoint);
+    } else {
+      setLmStudioEndpoint(lmStudioEndpoint);
+    }
     setLlmBusy(true);
     setStatusMessage(null);
     try {
@@ -410,6 +415,11 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
   }
 
   async function goNext() {
+    if (provider === "ollama") {
+      setOllamaEndpoint(ollamaEndpoint);
+    } else {
+      setLmStudioEndpoint(lmStudioEndpoint);
+    }
     if (isLastStep) {
       await commitOnboardingAndFinish();
       return;
@@ -526,13 +536,18 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
                       const next = event.target.value;
                       if (provider === "ollama") {
                         setOllamaEndpointState(next);
-                        setOllamaEndpoint(next);
                       } else {
                         setLmStudioEndpointState(next);
-                        setLmStudioEndpoint(next);
                       }
                       setHasExtracted(false);
                       setExtractionFailed(false);
+                    }}
+                    onBlur={() => {
+                      if (provider === "ollama") {
+                        setOllamaEndpoint(ollamaEndpoint);
+                      } else {
+                        setLmStudioEndpoint(lmStudioEndpoint);
+                      }
                     }}
                     placeholder={
                       provider === "ollama" ? "http://localhost:11434" : "http://localhost:1234"
