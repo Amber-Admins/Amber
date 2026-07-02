@@ -4,6 +4,7 @@ import { onboardingCommit, onboardingExtractProposals } from "../ipc";
 import { unwrapIpcResult } from "../services/ipcResult";
 import { getLlmModels } from "../services/nodes";
 import ModelSetupPanel from "./ModelSetupPanel";
+import { getRecommendedStacks } from "../services/modelSetup";
 import { listVaults } from "../services/vaults";
 import { setSetting } from "../services/settings";
 import {
@@ -233,6 +234,19 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
     setLlmModel(provider, nextModel);
     setHasExtracted(false);
     setExtractionFailed(false);
+  }
+
+  async function handleStackSelected(stackId: string) {
+    try {
+      const recommendedStacks = await getRecommendedStacks();
+      const chosen = recommendedStacks.find((s) => s.id === stackId);
+      if (chosen?.modelName) {
+        setSelectedModel(chosen.modelName);
+      }
+    } catch (err) {
+      console.warn("Failed to apply recommended stack settings:", err);
+    }
+    await goNext();
   }
 
   function onAnswerChange(field: keyof BasicsAnswers, value: string) {
@@ -468,7 +482,10 @@ function OnboardingShell({ onComplete, onSkip, busy, errorMessage }: OnboardingS
           <p>{description}</p>
           {currentStep === MODEL_SETUP_STEP_INDEX ? (
             <div className="onboarding-llm-grid">
-              <ModelSetupPanel variant="onboarding" onStackSelected={() => void goNext()} />
+              <ModelSetupPanel
+                variant="onboarding"
+                onStackSelected={(stackId) => void handleStackSelected(stackId)}
+              />
               <div className="onboarding-hint">
                 Pick a recommended stack to continue, or use the skip button below if you want to
                 set this up later.
