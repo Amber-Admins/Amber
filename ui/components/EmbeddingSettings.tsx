@@ -169,7 +169,9 @@ export default function EmbeddingSettings({
           <p className={styles["embedding-settings-item"]}>{syncError}</p>
         ) : null}
 
-        {embeddingStatus.coveragePercent < 100 || modelChanged ? (
+        {embeddingStatus.coveragePercent < 100 ||
+        modelChanged ||
+        embeddingStatus.reembedInProgress ? (
           <>
             {embeddingStatus.reembedInProgress ? (
               <>
