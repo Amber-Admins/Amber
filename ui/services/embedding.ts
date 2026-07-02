@@ -1,21 +1,9 @@
-/// TEMP functions to be replaced with IPC calls once merged
-type EmbeddingStatus = {
-  activeModel: string;
-  tier: string;
-  backend: string;
-  coveragePercent: number;
-  lastComputedAt: string | null;
-  jaccardFallbackActive: boolean;
-  reembedInProgress: boolean;
-};
-export async function invokeTyped<T>(_command: string, _payload?: unknown): Promise<T> {
-  console.warn(`invokeTyped mock called: ${_command}`);
+import type { EmbeddingStatus } from "../types/generated";
+import { invokeTyped } from "../ipc";
+import { unwrapIpcResult } from "./ipcResult.ts";
 
-  return undefined as T;
-}
-///END TEMP functions to be replaced with IPC calls once mergedß
 const MOCK_STATUS: EmbeddingStatus = {
-  activeModel: "avsolatorio/GIST-small-Embedding-v0",
+  model: "avsolatorio/GIST-small-Embedding-v0",
   tier: "light",
   backend: "onnx",
   coveragePercent: 0,
@@ -28,15 +16,16 @@ const USE_MOCK = import.meta.env.VITE_USE_EMBED_MOCK !== "false"; // default: mo
 
 export async function getEmbeddingStatus(): Promise<EmbeddingStatus> {
   if (USE_MOCK) return MOCK_STATUS;
-  return invokeTyped<EmbeddingStatus>("embedding_get_status");
+  const status = await unwrapIpcResult(invokeTyped<EmbeddingStatus>("embedding_get_status"));
+  return status;
 }
 
 export async function startReembed(): Promise<void> {
   if (USE_MOCK) return;
-  return invokeTyped<void>("embedding_reembed_start");
+  await unwrapIpcResult(invokeTyped<void>("embedding_reembed_start"));
 }
 
 export async function cancelReembed(): Promise<void> {
   if (USE_MOCK) return;
-  return invokeTyped<void>("embedding_reembed_cancel");
+  await unwrapIpcResult(invokeTyped<void>("embedding_reembed_cancel"));
 }

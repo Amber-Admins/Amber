@@ -1,18 +1,12 @@
 // TEMP — to be replaced with ../../types/generated
-type EmbeddingStatus = {
-  activeModel: string;
-  tier: string;
-  backend: string;
-  coveragePercent: number;
-  lastComputedAt: string | null;
-  jaccardFallbackActive: boolean;
-  reembedInProgress: boolean;
-};
-// END TEMP
+import type { EmbeddingStatus } from "../types/generated";
 
 type EmbeddingSettingsProps = {
   status: EmbeddingStatus | null;
   loading: boolean;
+  model: string;
+  syncState: "idle" | "running" | "complete" | "error";
+  syncError: string;
   onReembed: () => void;
   onCancelReembed: () => void;
 };
@@ -36,6 +30,9 @@ function formatRelativeTime(isoString: string | null): string {
 export default function EmbeddingSettings({
   status,
   loading,
+  model,
+  syncState,
+  syncError,
   onReembed,
   onCancelReembed,
 }: EmbeddingSettingsProps) {
@@ -43,6 +40,14 @@ export default function EmbeddingSettings({
     return (
       <div className="embedding-settings-panel">
         <p className="embedding-settings-item">Loading embedding status…</p>
+      </div>
+    );
+  }
+
+  if (syncState === "error" && !status) {
+    return (
+      <div className="embedding-settings-panel">
+        <p className="embedding-settings-item">{syncError}</p>
       </div>
     );
   }
@@ -56,6 +61,7 @@ export default function EmbeddingSettings({
   }
 
   const coverageClamped = Math.min(100, Math.max(0, status.coveragePercent));
+  const modelChanged = status.model !== model;
 
   return (
     <div className="embedding-settings-panel">
@@ -75,7 +81,7 @@ export default function EmbeddingSettings({
       {/* Model info */}
       <p className="embedding-settings-item">
         <span className="embedding-settings-label">Model</span>
-        {status.activeModel}
+        {status.model}
       </p>
       <p className="embedding-settings-item">
         <span className="embedding-settings-label">Tier</span>
@@ -109,20 +115,37 @@ export default function EmbeddingSettings({
 
       {/* Actions */}
       <div className="embedding-settings-actions">
-        {status.reembedInProgress ? (
+        {syncState === "running" ? (
+          <div className="embedding-spinner-row">
+            <span className="embedding-spinner" aria-label="Polling embedding status" />
+            <span className="embedding-settings-item">Polling embedding status…</span>
+          </div>
+        ) : syncState === "complete" ? (
+          <p className="embedding-settings-item">Embedding status updated.</p>
+        ) : syncState === "error" ? (
+          <p className="embedding-settings-item">{syncError}</p>
+        ) : null}
+
+        {status.coveragePercent < 100 || modelChanged ? (
           <>
-            <div className="embedding-spinner-row">
-              <span className="embedding-spinner" aria-label="Re-embedding in progress" />
-              <span className="embedding-settings-item">Re-embedding…</span>
-            </div>
-            <button className="embedding-settings-button" onClick={onCancelReembed}>
-              Cancel
-            </button>
+            {status.reembedInProgress ? (
+              <>
+                <div className="embedding-spinner-row">
+                  <span className="embedding-spinner" aria-label="Re-embedding in progress" />
+                  <span className="embedding-settings-item">Re-embedding…</span>
+                </div>
+                <button className="embedding-settings-button" onClick={onCancelReembed}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <button className="embedding-settings-button" onClick={onReembed}>
+                Re-embed Memories
+              </button>
+            )}
           </>
         ) : (
-          <button className="embedding-settings-button" onClick={onReembed}>
-            Re-embed Memories
-          </button>
+          <p className="embedding-settings-item">All memories are embedded.</p>
         )}
       </div>
     </div>

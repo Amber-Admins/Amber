@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEV_ONBOARDING_CHANGED } from "../constants/devEvents";
 import { onboardingExtractProposals } from "../ipc";
 import { getLlmModels } from "../services/nodes";
@@ -19,7 +19,8 @@ import {
   setApiKey,
 } from "../utils/settings";
 import EmbeddingSettings from "./EmbeddingSettings";
-import { cancelReembed, startReembed } from "../services/embedding";
+import { cancelReembed, getEmbeddingStatus, startReembed } from "../services/embedding";
+import type { EmbeddingStatus } from "../types/generated";
 
 const DEV_SAMPLE_ONBOARDING_ANSWERS = `{
   "displayName": "Dev Tester",
@@ -27,6 +28,8 @@ const DEV_SAMPLE_ONBOARDING_ANSWERS = `{
   "workContext": "software engineer on a small team",
   "interests": "running, reading, local LLMs"
 }`;
+
+const EMBEDDING_STATUS_TIMEOUT_MS = 5000;
 
 const CLOUD_PROVIDERS = [
   { id: "openai", name: "OpenAI", presets: ["gpt-4o", "gpt-4o-mini", "o1-mini", "o1-preview"] },
@@ -282,17 +285,6 @@ function CloudSettings({
     </div>
   );
 }
-///TEMP TYPES
-type EmbeddingStatus = {
-  activeModel: string;
-  tier: string;
-  backend: string;
-  coveragePercent: number;
-  lastComputedAt: string | null;
-  jaccardFallbackActive: boolean;
-  reembedInProgress: boolean;
-};
-
 function LlmSettings() {
   const showDevOnboardingTools = import.meta.env.DEV;
   const [onboardingCompleteLabel, setOnboardingCompleteLabel] = useState<string>("…");
@@ -323,7 +315,100 @@ function LlmSettings() {
   const localEndpoint = localProvider === "ollama" ? ollamaEndpoint : lmStudioEndpoint;
 
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus | null>(null);
-  const [embeddingLoading] = useState(true);
+  const [embeddingLoading, setEmbeddingLoading] = useState(true);
+  const [embeddingSyncState, setEmbeddingSyncState] = useState<
+    "idle" | "running" | "complete" | "error"
+  >("idle");
+  const [embeddingSyncError, setEmbeddingSyncError] = useState("");
+  const embeddingPollTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
+  const embeddingMountedRef = useRef(true);
+
+  function clearEmbeddingPoll() {
+    if (embeddingPollTimeoutRef.current !== null) {
+      window.clearTimeout(embeddingPollTimeoutRef.current);
+      embeddingPollTimeoutRef.current = null;
+    }
+  }
+
+  async function loadEmbeddingStatusWithTimeout() {
+    let timeoutId: ReturnType<typeof window.setTimeout> | null = null;
+    try {
+      return await Promise.race([
+        getEmbeddingStatus(),
+        new Promise<EmbeddingStatus>((_, reject) => {
+          timeoutId = window.setTimeout(() => {
+            reject(new Error("Timed out loading embedding status."));
+          }, EMBEDDING_STATUS_TIMEOUT_MS);
+        }),
+      ]);
+    } finally {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    }
+  }
+
+  async function refreshEmbeddingStatus(pollAgain: boolean) {
+    try {
+      const status = await loadEmbeddingStatusWithTimeout();
+      if (!embeddingMountedRef.current) {
+        return;
+      }
+
+      setEmbeddingStatus(status);
+      window.dispatchEvent(new CustomEvent("amber:embedding-settings-changed"));
+
+      if (status.reembedInProgress) {
+        setEmbeddingSyncState("running");
+        if (pollAgain) {
+          clearEmbeddingPoll();
+          embeddingPollTimeoutRef.current = window.setTimeout(() => {
+            void refreshEmbeddingStatus(true);
+          }, 2000);
+        }
+      } else {
+        clearEmbeddingPoll();
+        setEmbeddingSyncState(pollAgain ? "complete" : "idle");
+      }
+    } catch (err) {
+      if (!embeddingMountedRef.current) {
+        return;
+      }
+
+      clearEmbeddingPoll();
+      setEmbeddingSyncState("error");
+      setEmbeddingSyncError(err instanceof Error ? err.message : String(err));
+    } finally {
+      if (embeddingMountedRef.current) {
+        setEmbeddingLoading(false);
+      }
+    }
+  }
+
+  async function runEmbeddingAction(action: () => Promise<void>) {
+    setEmbeddingSyncError("");
+    setEmbeddingSyncState("running");
+
+    try {
+      await action();
+      await refreshEmbeddingStatus(true);
+      window.dispatchEvent(new CustomEvent("amber:embedding-settings-changed"));
+    } catch (err) {
+      clearEmbeddingPoll();
+      setEmbeddingSyncState("error");
+      setEmbeddingSyncError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  useEffect(() => {
+    embeddingMountedRef.current = true;
+    void refreshEmbeddingStatus(false);
+
+    return () => {
+      embeddingMountedRef.current = false;
+      clearEmbeddingPoll();
+    };
+  }, []);
 
   useEffect(() => {
     if (!showDevOnboardingTools) return;
@@ -590,20 +675,22 @@ function LlmSettings() {
             </div>
           </div>
         )}
-        <EmbeddingSettings
-          status={embeddingStatus}
-          loading={embeddingLoading}
-          onReembed={() => {
-            void startReembed().then(() =>
-              setEmbeddingStatus((s) => (s ? { ...s, reembedInProgress: true } : s))
-            );
-          }}
-          onCancelReembed={() => {
-            void cancelReembed().then(() =>
-              setEmbeddingStatus((s) => (s ? { ...s, reembedInProgress: false } : s))
-            );
-          }}
-        />
+        <div className="settings-section memory-search-section">
+          <h4 className="llm-settings-dev-title">Memory Search</h4>
+          <EmbeddingSettings
+            status={embeddingStatus || null}
+            model={localSelectedModel || getLlmModel(localProvider) || ""}
+            loading={embeddingLoading}
+            syncState={embeddingSyncState}
+            syncError={embeddingSyncError}
+            onReembed={() => {
+              void runEmbeddingAction(startReembed);
+            }}
+            onCancelReembed={() => {
+              void runEmbeddingAction(cancelReembed);
+            }}
+          />
+        </div>
       </div>
 
       {showDevOnboardingTools ? (
