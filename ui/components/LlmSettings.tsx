@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { DEV_ONBOARDING_CHANGED } from "../constants/devEvents";
 import { onboardingExtractProposals } from "../ipc";
 import { getLlmModels } from "../services/nodes";
@@ -324,15 +324,15 @@ function LlmSettings() {
   const [embeddingSyncError, setEmbeddingSyncError] = useState("");
   const embeddingPollTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | null>(null);
   const embeddingMountedRef = useRef(true);
-
-  function clearEmbeddingPoll() {
+  const refreshEmbeddingStatusRef = useRef<((pollAgain: boolean) => Promise<void>) | null>(null);
+  const clearEmbeddingPoll = useCallback(() => {
     if (embeddingPollTimeoutRef.current !== null) {
       window.clearTimeout(embeddingPollTimeoutRef.current);
       embeddingPollTimeoutRef.current = null;
     }
-  }
+  }, []);
 
-  async function loadEmbeddingStatusWithTimeout() {
+  const loadEmbeddingStatusWithTimeout = useCallback(async (): Promise<EmbeddingStatus> => {
     let timeoutId: ReturnType<typeof window.setTimeout> | null = null;
     try {
       return await Promise.race([
@@ -348,69 +348,80 @@ function LlmSettings() {
         window.clearTimeout(timeoutId);
       }
     }
-  }
+  }, []);
 
-  async function refreshEmbeddingStatus(pollAgain: boolean) {
-    try {
-      const status = await loadEmbeddingStatusWithTimeout();
-      if (!embeddingMountedRef.current) {
-        return;
-      }
-
-      setEmbeddingStatus(status);
-      window.dispatchEvent(new CustomEvent("amber:embedding-settings-changed"));
-
-      if (status.reembedInProgress) {
-        setEmbeddingSyncState("running");
-        if (pollAgain) {
-          clearEmbeddingPoll();
-          embeddingPollTimeoutRef.current = window.setTimeout(() => {
-            void refreshEmbeddingStatus(true);
-          }, 2000);
+  const refreshEmbeddingStatus = useCallback(
+    async (pollAgain: boolean) => {
+      try {
+        const status = await loadEmbeddingStatusWithTimeout();
+        if (!embeddingMountedRef.current) {
+          return;
         }
-      } else {
+
+        setEmbeddingStatus(status);
+        window.dispatchEvent(new CustomEvent("amber:embedding-settings-changed"));
+
+        if (status.reembedInProgress) {
+          setEmbeddingSyncState("running");
+          if (pollAgain) {
+            clearEmbeddingPoll();
+            embeddingPollTimeoutRef.current = window.setTimeout(() => {
+              void refreshEmbeddingStatusRef.current?.(true);
+            }, 2000);
+          }
+        } else {
+          clearEmbeddingPoll();
+          setEmbeddingSyncState(pollAgain ? "complete" : "idle");
+        }
+      } catch (err) {
+        if (!embeddingMountedRef.current) {
+          return;
+        }
+
         clearEmbeddingPoll();
-        setEmbeddingSyncState(pollAgain ? "complete" : "idle");
+        setEmbeddingSyncState("error");
+        setEmbeddingSyncError(err instanceof Error ? err.message : String(err));
+      } finally {
+        if (embeddingMountedRef.current) {
+          setEmbeddingLoading(false);
+        }
       }
-    } catch (err) {
-      if (!embeddingMountedRef.current) {
-        return;
+    },
+    [clearEmbeddingPoll, loadEmbeddingStatusWithTimeout]
+  );
+
+  useEffect(() => {
+    refreshEmbeddingStatusRef.current = refreshEmbeddingStatus;
+  }, [refreshEmbeddingStatus]);
+
+  const runEmbeddingAction = useCallback(
+    async (action: () => Promise<void>) => {
+      setEmbeddingSyncError("");
+      setEmbeddingSyncState("running");
+
+      try {
+        await action();
+        await refreshEmbeddingStatus(true);
+        window.dispatchEvent(new CustomEvent("amber:embedding-settings-changed"));
+      } catch (err) {
+        clearEmbeddingPoll();
+        setEmbeddingSyncState("error");
+        setEmbeddingSyncError(err instanceof Error ? err.message : String(err));
       }
-
-      clearEmbeddingPoll();
-      setEmbeddingSyncState("error");
-      setEmbeddingSyncError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (embeddingMountedRef.current) {
-        setEmbeddingLoading(false);
-      }
-    }
-  }
-
-  async function runEmbeddingAction(action: () => Promise<void>) {
-    setEmbeddingSyncError("");
-    setEmbeddingSyncState("running");
-
-    try {
-      await action();
-      await refreshEmbeddingStatus(true);
-      window.dispatchEvent(new CustomEvent("amber:embedding-settings-changed"));
-    } catch (err) {
-      clearEmbeddingPoll();
-      setEmbeddingSyncState("error");
-      setEmbeddingSyncError(err instanceof Error ? err.message : String(err));
-    }
-  }
+    },
+    [clearEmbeddingPoll, refreshEmbeddingStatus]
+  );
 
   useEffect(() => {
     embeddingMountedRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch; setState only happens after the await inside refreshEmbeddingStatus, not synchronously
     void refreshEmbeddingStatus(false);
 
     return () => {
       embeddingMountedRef.current = false;
       clearEmbeddingPoll();
     };
-  }, []);
+  }, [clearEmbeddingPoll, refreshEmbeddingStatus]);
 
   useEffect(() => {
     if (!showDevOnboardingTools) return;
